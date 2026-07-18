@@ -74,8 +74,38 @@
             <!-- API Endpoints List -->
             <div class="space-y-10">
 
-                <!-- 1. MENGIRIM PESAN TEKS KE PERSONAL -->
+                <!-- 1. MENGIRIM PESAN TEKS INTERNAL -->
                 <div class="space-y-4">
+                    <div class="flex items-center space-x-3">
+                        <span class="method-badge method-post">POST</span>
+                        <code class="text-sm font-bold text-slate-800">/api/internal/send-text</code>
+                    </div>
+                    <div class="text-sm text-slate-600 leading-relaxed">
+                        <p class="font-semibold text-slate-800 mb-1">Kasus Penggunaan: Mengirim Pesan Teks Biasa ke Personal atau Grup</p>
+                        <p>Endpoint ini cocok dipakai dari halaman dashboard atau UI <code class="bg-slate-50 px-1 rounded text-xs">/send.html</code>. Mengirim pesan teks biasa tanpa file, ke nomor personal atau grup yang sudah terhubung. Membutuhkan sesi login aktif.</p>
+                    </div>
+
+                    <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/50 text-xs text-slate-600 space-y-2">
+                        <p class="font-bold text-slate-700">Payload JSON (Raw):</p>
+                        <ul class="list-disc ml-5 space-y-1">
+                            <li><code class="font-bold text-teal-600 font-mono">personalTargets</code> (String - Opsional): Nomor tujuan personal, pisahkan dengan koma.</li>
+                            <li><code class="font-bold text-teal-600 font-mono">groupId</code> (String - Opsional): Nama grup atau ID grup tujuan.</li>
+                            <li><code class="font-bold text-teal-600 font-mono">message</code> (String - Wajib): Isi pesan teks yang ingin dikirim.</li>
+                        </ul>
+                    </div>
+
+                    <p class="text-xs font-bold text-slate-700">Contoh cURL Request:</p>
+                    <pre>curl -X POST http://localhost:8000/api/internal/send-text \
+  -H "Content-Type: application/json" \
+  -d '{
+    "personalTargets": "08123456789",
+    "message": "Halo! Ini pesan teks dari Portal WA."
+  }' \
+  -b cookie.txt</pre>
+                </div>
+
+                <!-- 2. MENGIRIM PESAN TEKS EKSTERNAL -->
+                <div class="space-y-4 pt-8 border-t border-slate-100">
                     <div class="flex items-center space-x-3">
                         <span class="method-badge method-post">POST</span>
                         <code class="text-sm font-bold text-slate-800">/api/external/send-message (Personal JID)</code>
@@ -95,7 +125,7 @@
                     </div>
 
                     <p class="text-xs font-bold text-slate-700">Contoh cURL Request:</p>
-                    <pre>curl -X POST http://localhost:3000/api/external/send-message \
+                    <pre>curl -X POST http://localhost:8000/api/external/send-message \
   -H "Content-Type: application/json" \
   -H "x-api-key: [EXTERNAL_API_KEY_ANDA]" \
   -d '{
@@ -126,7 +156,7 @@
                     </div>
 
                     <p class="text-xs font-bold text-slate-700">Contoh cURL Request:</p>
-                    <pre>curl -X POST http://localhost:3000/api/external/send-message \
+                    <pre>curl -X POST http://localhost:8000/api/external/send-message \
   -H "Content-Type: application/json" \
   -H "x-api-key: [EXTERNAL_API_KEY_ANDA]" \
   -d '{
@@ -158,7 +188,7 @@
                     </div>
 
                     <p class="text-xs font-bold text-slate-700">Contoh cURL Request (Upload Gambar/Dokumen):</p>
-                    <pre>curl -X POST http://localhost:3000/api/internal/send-media \
+                    <pre>curl -X POST http://localhost:8000/api/internal/send-media \
   -F "file=@/home/user/document/laporan_penjualan.pdf" \
   -F "personalTargets=081234567890" \
   -F "caption=Berikut lampiran laporan bulanan kami" \
@@ -187,7 +217,7 @@
                     </div>
 
                     <p class="text-xs font-bold text-slate-700">Contoh cURL Request (Kirim Media via URL):</p>
-                    <pre>curl -X POST http://localhost:3000/api/internal/send-media-url \
+                    <pre>curl -X POST http://localhost:8000/api/internal/send-media-url \
   -H "Content-Type: application/json" \
   -d '{
     "url": "https://images.unsplash.com/photo-1579202673506-ca3ce28943ef?w=500",
@@ -195,6 +225,25 @@
     "caption": "Selamat pagi! Silakan tinjau poster promosi terbaru kami."
   }' \
   -b cookie.txt</pre>
+                </div>
+
+                <!-- Gemini AI -->
+                <div class="pt-8 border-t border-slate-100 space-y-4">
+                    <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Gemini AI via WhatsApp</h3>
+                    <div class="text-sm text-slate-600 leading-relaxed space-y-2">
+                        <p>Portal WA juga mendukung fitur AI Gemini yang bisa dipakai langsung dari chat WhatsApp. Fitur ini aktif ketika Anda mengisi variabel <code class="bg-slate-50 px-1 py-0.5 rounded text-xs">GEMINI_API_KEY</code> di file <code class="bg-slate-50 px-1 py-0.5 rounded text-xs">.env</code>.</p>
+                        <p>Caranya:</p>
+                        <ol class="list-decimal ml-5 space-y-1">
+                            <li>Isi <code class="bg-slate-50 px-1 py-0.5 rounded text-xs">GEMINI_API_KEY</code> di <code class="bg-slate-50 px-1 py-0.5 rounded text-xs">.env</code>.</li>
+                            <li>Restart server dengan <code class="bg-slate-50 px-1 py-0.5 rounded text-xs">node bot.js</code>.</li>
+                            <li>Kirim perintah ke bot WhatsApp seperti <code class="bg-slate-50 px-1 py-0.5 rounded text-xs">/gemini apa itu portal-wa3?</code>.</li>
+                        </ol>
+                        <p>Contoh lain:</p>
+                        <ul class="list-disc ml-5 space-y-1">
+                            <li><code class="bg-slate-50 px-1 py-0.5 rounded text-xs">/gemini buatkan ringkasan singkat tentang proyek ini</code></li>
+                            <li><code class="bg-slate-50 px-1 py-0.5 rounded text-xs">/gemini bantu saya buat draft pesan promosi</code></li>
+                        </ul>
+                    </div>
                 </div>
 
                 <!-- Tips & Best Practices -->

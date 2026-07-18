@@ -88,6 +88,7 @@ async function startBot() {
     app.get('/index.html', checkPageAuth);
     app.get('/validator.html', checkPageAuth);
     app.get('/settings.html', checkPageAuth);
+    app.get('/send.html', checkPageAuth);
     app.use('/api/internal', checkApiAuth);
 
     // =================================================================
@@ -357,8 +358,52 @@ async function startBot() {
     });
 
     // =================================================================
-    //                 ENDPOINTS UNTUK MENGIRIM MEDIA / DOKUMEN
+    //                 ENDPOINTS UNTUK MENGIRIM PESAN & MEDIA
     // =================================================================
+    app.post('/api/internal/send-text', async (req, res) => {
+        try {
+            if (!sock || !sock.user) return res.status(503).json({ error: 'Bot belum terhubung.' });
+
+            const { personalTargets, groupId, message } = req.body;
+            if (!message) return res.status(400).json({ error: 'Pesan wajib diisi.' });
+
+            const targets = personalTargets ? personalTargets.split(',').map(n => n.trim()).filter(Boolean) : [];
+            if (!targets.length && !groupId) {
+                return res.status(400).json({ error: 'Pilih minimal satu tujuan personal atau grup.' });
+            }
+
+            const sendToJid = async (jid) => {
+                await sock.sendMessage(jid, { text: message });
+            };
+
+            for (const number of targets) {
+                let formatted = number;
+                if (formatted.startsWith('0')) formatted = '62' + formatted.substring(1);
+                const targetJid = `${formatted}@s.whatsapp.net`;
+                const [result] = await sock.onWhatsApp(targetJid);
+                if (!result || !result.exists) {
+                    return res.status(404).json({ error: `Nomor ${number} tidak terdaftar di WhatsApp.` });
+                }
+                await sendToJid(targetJid);
+            }
+
+            if (groupId) {
+                let targetGroupId = groupId;
+                if (!groupId.includes('@')) {
+                    const groups = await sock.groupFetchAllParticipating();
+                    const found = Object.values(groups).find(g => g.subject.toLowerCase() === groupId.toLowerCase());
+                    if (!found) return res.status(404).json({ error: 'Grup tidak ditemukan.' });
+                    targetGroupId = found.id;
+                }
+                await sendToJid(targetGroupId);
+            }
+
+            res.json({ success: true, message: 'Pesan teks berhasil dikirim.' });
+        } catch (e) {
+            res.status(500).json({ error: e.message || 'Gagal mengirim pesan teks.' });
+        }
+    });
+
     app.post('/api/internal/send-media', upload.single('file'), async (req, res) => {
         try {
             if (!sock || !sock.user) return res.status(503).json({ error: 'Bot tidak terhubung.' });
