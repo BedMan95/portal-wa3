@@ -55,7 +55,7 @@ async function startBot() {
     if (!fs.existsSync(uploadsDir)) fs.mkdirSync(uploadsDir, { recursive: true });
     const upload = multer({ dest: uploadsDir });
 
-    const PORT = 3000;
+    const PORT = Number(process.env.PORT || 3000);
 
     // Variabel Global untuk Status Bot
     let sock;

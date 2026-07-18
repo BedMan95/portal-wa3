@@ -12,16 +12,17 @@ Ringkasan singkat untuk menjalankan dan menggunakan bot ini secara lokal.
 ## Variabel lingkungan (.env)
 Buat file `.env` di root berisi minimal:
 
-- `PORT` (opsional, default 8000)
+- `PORT` (opsional; jika diatur maka aplikasi memakai nilai tersebut, jika tidak ada maka fallback ke `3000`)
 - `SESSION_SECRET` (string rahasia untuk session)
 - `EXTERNAL_API_KEY` (API key untuk endpoint eksternal)
+- `GEMINI_API_KEY` (opsional, dipakai jika fitur Gemini aktif)
 
 Jangan membagikan `.env` atau kunci sensitif.
 
 ## Menjalankan
 - Mulai server:
   - `node bot.js`
-- Buka dashboard di: `http://localhost:8000` lalu login.
+- Buka dashboard di: `http://localhost:8000` atau sesuai port yang Anda tentukan di `.env`.
   - Default user/password: lihat file [users.json](users.json#L1) (sudah disesuaikan ke `password123`).
 
 ## Endpoints & UI
