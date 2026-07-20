@@ -375,7 +375,7 @@ async function startBot() {
                 if (t === 'image') payload = { image: { url: mediaUrl }, caption: caption || message || '' };
                 else if (t === 'video') payload = { video: { url: mediaUrl }, caption: caption || message || '' };
                 else if (t === 'audio') payload = { audio: { url: mediaUrl } };
-                else payload = { document: { url: mediaUrl }, fileName: path.basename(mediaUrl) };
+                else payload = { document: { url: mediaUrl }, fileName: path.basename(mediaUrl), mimetype: 'application/octet-stream' };
             } else {
                 payload = { text: message };
             }
@@ -521,10 +521,12 @@ async function startBot() {
                 if (type === 'image') return { image: { url }, caption: caption || '' };
                 if (type === 'video') return { video: { url }, caption: caption || '' };
                 if (type === 'audio') return { audio: { url } };
-                return { document: { url }, fileName: path.basename(url) };
+                return { document: { url }, fileName: path.basename(url), mimetype: inferredMime || 'application/octet-stream' };
             };
 
-            const payload = makePayload();
+            const sendToJid = async (jid) => {
+                await sock.sendMessage(jid, makePayload());
+            };
 
             if (personalTargets) {
                 const targets = personalTargets.split(',').map(n => n.trim()).filter(Boolean);
@@ -532,7 +534,7 @@ async function startBot() {
                     let formatted = number;
                     if (formatted.startsWith('0')) formatted = '62' + formatted.substring(1);
                     const targetJid = `${formatted}@s.whatsapp.net`;
-                    await sock.sendMessage(targetJid, payload);
+                    await sendToJid(targetJid);
                 }
             }
 
@@ -543,7 +545,7 @@ async function startBot() {
                     const found = Object.values(groups).find(g => g.subject.toLowerCase() === groupId.toLowerCase());
                     if (found) targetGroupId = found.id; else return res.status(404).json({ error: 'Grup tidak ditemukan.' });
                 }
-                await sock.sendMessage(targetGroupId, payload);
+                await sendToJid(targetGroupId);
             }
 
             res.json({ success: true, message: 'Media (via URL) berhasil dikirim.' });
