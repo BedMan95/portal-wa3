@@ -79,7 +79,17 @@ async function startBot() {
 
     app.use(express.json());
     app.use(express.urlencoded({ extended: true }));
-    app.use(session({ secret: process.env.SESSION_SECRET || 'secret-key-default', resave: false, saveUninitialized: true, cookie: { secure: process.env.NODE_ENV === 'production' }}));
+    app.set('trust proxy', 1);
+    app.use(session({
+        secret: process.env.SESSION_SECRET || 'secret-key-default',
+        resave: false,
+        saveUninitialized: true,
+        cookie: {
+            httpOnly: true,
+            sameSite: 'lax',
+            secure: process.env.SESSION_SECURE === 'true'
+        }
+    }));
     const checkPageAuth = (req, res, next) => { if (req.session.userId) { next(); } else { res.redirect('/login.html'); } };
     const checkApiAuth = (req, res, next) => { if (req.session.userId) { next(); } else { res.status(401).json({ error: 'Sesi tidak valid atau telah berakhir. Silakan login kembali.' }); } };
     const checkApiKey = (req, res, next) => { const apiKey = req.headers['x-api-key']; if (apiKey && apiKey === process.env.EXTERNAL_API_KEY) { next(); } else { res.status(403).json({ error: 'Forbidden: API Key tidak valid atau tidak ada.' }); } };
