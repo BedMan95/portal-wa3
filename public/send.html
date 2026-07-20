@@ -17,29 +17,7 @@
     </style>
 </head>
 <body class="bg-slate-50/50 text-slate-700 min-h-screen">
-    <header class="bg-white/80 backdrop-blur-lg border-b border-slate-200/80 sticky top-0 z-10">
-        <nav class="container mx-auto px-6 py-4 flex flex-col sm:flex-row justify-between items-center gap-4">
-            <div class="flex items-center space-x-3">
-                 <div class="w-10 h-10 rounded-xl bg-gradient-to-br from-teal-600 to-emerald-500 flex items-center justify-center shadow-md shadow-teal-600/20">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-6 w-6 text-white" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2.5" d="M8 12h.01M12 12h.01M16 12h.01M21 12c0 4.418-4.03 8-9 8a9.863 9.863 0 01-4.255-.949L3 20l1.395-3.72C3.512 15.042 3 13.574 3 12c0-4.418 4.03-8 9-8s9 3.582 9 8z" />
-                    </svg>
-                </div>
-                <div>
-                    <h1 class="text-lg font-bold text-slate-800 leading-none">Portal WA</h1>
-                    <p class="text-[10px] text-teal-600 font-semibold uppercase tracking-wider mt-1">Nusa Edition</p>
-                </div>
-            </div>
-            <div class="flex items-center flex-wrap justify-center gap-1.5">
-                <a href="/" class="nav-link">Utama</a>
-                <a href="/validator.html" class="nav-link">Validator</a>
-                <a href="/send.html" class="nav-link active">Kirim</a>
-                <a href="/docs.html" class="nav-link">Docs</a>
-                <a href="/settings.html" class="nav-link">Pengaturan</a>
-                <a href="/logout" class="px-4 py-2 text-sm rounded-lg font-semibold bg-red-50 text-red-600 hover:bg-red-100 transition-all ml-2">Logout</a>
-            </div>
-        </nav>
-    </header>
+    <div id="header-container"></div>
 
     <main class="container mx-auto p-4 sm:p-8 max-w-4xl">
         <div class="card relative overflow-hidden bg-white">
@@ -121,11 +99,6 @@
                         <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Isi Pesan</label>
                         <textarea id="textMessage" rows="4" class="form-input" placeholder="Tulis pesan teks yang ingin dikirim..."></textarea>
                     </div>
-                    <div class="flex justify-end">
-                        <button type="button" id="sendTextBtn" class="w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-sm bg-sky-600 hover:bg-sky-700 text-white transition-all shadow-md">
-                            Kirim Pesan Teks
-                        </button>
-                    </div>
                 </div>
 
                 <!-- Feedback status panel -->
@@ -135,24 +108,20 @@
 
                 <!-- Buttons actions -->
                 <div class="flex flex-col sm:flex-row justify-end items-center gap-3 pt-4 border-t border-slate-100">
-                    <button type="button" id="sendFileBtn" class="w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-sm bg-slate-950 text-white hover:bg-slate-800 transition-all shadow-md flex items-center justify-center space-x-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M3 17a1 1 0 011-1h12a1 1 0 110 2H4a1 1 0 01-1-1zM6.293 6.707a1 1 0 010-1.414l3-3a1 1 0 011.414 0l3 3a1 1 0 01-1.414 1.414L11 5.414V13a1 1 0 11-2 0V5.414L7.707 6.707a1 1 0 01-1.414 0z" clip-rule="evenodd" />
+                    <button type="button" id="smartSendBtn" class="w-full sm:w-auto px-8 py-3.5 rounded-xl font-bold text-sm bg-gradient-to-r from-teal-600 to-emerald-500 hover:from-teal-700 hover:to-emerald-600 text-white transition-all shadow-lg shadow-teal-500/30 flex items-center justify-center space-x-2">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" viewBox="0 0 20 20" fill="currentColor">
+                            <path d="M10.894 2.553a1 1 0 00-1.788 0l-7 14a1 1 0 001.169 1.409l5-1.429A1 1 0 009 15.571V11a1 1 0 112 0v4.571a1 1 0 00.725.962l5 1.428a1 1 0 001.17-1.408l-7-14z" />
                         </svg>
-                        <span>Kirim File Lokal</span>
-                    </button>
-                    <button type="button" id="sendUrlBtn" class="w-full sm:w-auto px-6 py-3 rounded-xl font-bold text-sm bg-teal-600 hover:bg-teal-700 text-white transition-all shadow-md flex items-center justify-center space-x-2">
-                        <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" viewBox="0 0 20 20" fill="currentColor">
-                            <path fill-rule="evenodd" d="M12.586 4.586a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0 1 1 0 00-1.414 1.414 4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5zm-5 5a1 1 0 00-1.414 1.414l1.5 1.5a4 4 0 005.656 0l3-3a4 4 0 00-5.656-5.656l-1.5 1.5a1 1 0 101.414 1.414l1.5-1.5a2 2 0 112.828 2.828l-3 3a2 2 0 01-2.828 0z" clip-rule="evenodd" />
-                        </svg>
-                        <span>Kirim via URL</span>
+                        <span>Kirim Pesan</span>
                     </button>
                 </div>
             </form>
         </div>
     </main>
 
+    <script src="/components/header.js"></script>
     <script>
+    document.getElementById('header-container').innerHTML = getHeaderHTML('/send.html');
     const handleAuthFailure = (message = 'Sesi login habis. Silakan login ulang dari halaman utama.') => {
         showStatus(message, true);
         setTimeout(() => {
@@ -194,101 +163,77 @@
         container.classList.remove('hidden');
     };
 
-    document.getElementById('sendFileBtn').addEventListener('click', async () => {
+    document.getElementById('smartSendBtn').addEventListener('click', async () => {
         const personalTargets = document.getElementById('personalTargets').value.trim();
         const groupId = document.getElementById('groupSelect').value;
         const caption = document.getElementById('caption').value;
         const fileEl = document.getElementById('fileInput');
-        
-        if (!fileEl.files.length) { 
-            showStatus('Pilih file lokal terlebih dahulu untuk dikirim.', true); 
-            return; 
-        }
-
-        const form = new FormData();
-        form.append('file', fileEl.files[0]);
-        if (personalTargets) form.append('personalTargets', personalTargets);
-        if (groupId) form.append('groupId', groupId);
-        if (caption) form.append('caption', caption);
-
-        showStatus('Sedang mengirim berkas lokal...');
-        try {
-            const res = await fetch('/api/internal/send-media', { method: 'POST', body: form, credentials: 'include' });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                if (res.status === 401 || res.status === 403) {
-                    handleAuthFailure();
-                    return;
-                }
-                throw new Error(data.error || 'Gagal mengirim berkas.');
-            }
-            showStatus(data.message || 'Berkas berhasil terkirim ke target.', false);
-        } catch (e) { showStatus('Gagal: ' + e.message, true); }
-    });
-
-    document.getElementById('sendUrlBtn').addEventListener('click', async () => {
-        const personalTargets = document.getElementById('personalTargets').value.trim();
-        const groupId = document.getElementById('groupSelect').value;
-        const caption = document.getElementById('caption').value;
         const url = document.getElementById('urlInput').value.trim();
-        
-        if (!url) { 
-            showStatus('Masukkan alamat URL berkas terlebih dahulu.', true); 
-            return; 
-        }
-
-        showStatus('Sedang mengirim berkas dari tautan web...');
-        try {
-            const res = await fetch('/api/internal/send-media-url', { method: 'POST', headers: { 'Content-Type': 'application/json' }, body: JSON.stringify({ personalTargets, groupId, url, caption }), credentials: 'include' });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                if (res.status === 401 || res.status === 403) {
-                    handleAuthFailure();
-                    return;
-                }
-                throw new Error(data.error || 'Gagal mengirim tautan.');
-            }
-            showStatus(data.message || 'Berkas via URL berhasil terkirim ke target.', false);
-        } catch (e) { showStatus('Gagal: ' + e.message, true); }
-    });
-
-    document.getElementById('sendTextBtn').addEventListener('click', async () => {
-        const personalTargets = document.getElementById('personalTargets').value.trim();
-        const groupId = document.getElementById('groupSelect').value;
         const message = document.getElementById('textMessage').value.trim();
-
-        if (!message) {
-            showStatus('Isi pesan teks terlebih dahulu.', true);
-            return;
-        }
 
         if (!personalTargets && !groupId) {
             showStatus('Pilih minimal satu tujuan personal atau grup.', true);
             return;
         }
 
-        showStatus('Sedang mengirim pesan teks...');
         try {
-            const res = await fetch('/api/internal/send-text', {
-                method: 'POST',
-                headers: { 'Content-Type': 'application/json' },
-                body: JSON.stringify({ personalTargets, groupId, message }),
-                credentials: 'include'
-            });
-            const data = await res.json().catch(() => ({}));
-            if (!res.ok) {
-                if (res.status === 401 || res.status === 403) {
-                    handleAuthFailure();
-                    return;
+            let res, data;
+            const targets = personalTargets ? personalTargets.split(',').map(n => n.trim()).filter(Boolean) : [];
+            
+            // Helper function to send via Unified API
+            const sendToTarget = async (targetType, target) => {
+                if (fileEl.files.length > 0) {
+                    const formData = new FormData();
+                    formData.append('targetType', targetType);
+                    formData.append('target', target);
+                    formData.append('file', fileEl.files[0]);
+                    if (caption) formData.append('caption', caption);
+                    
+                    return fetch('/api/v1/messages', {
+                        method: 'POST',
+                        body: formData
+                    });
+                } else {
+                    const payload = { targetType, target };
+                    if (url) {
+                        payload.mediaUrl = url;
+                        if (caption) payload.caption = caption;
+                    } else if (message) {
+                        payload.message = message;
+                    } else {
+                        throw new Error('Pilih file, masukkan URL, atau tulis pesan teks.');
+                    }
+                    
+                    return fetch('/api/v1/messages', {
+                        method: 'POST',
+                        headers: { 'Content-Type': 'application/json' },
+                        body: JSON.stringify(payload)
+                    });
                 }
-                throw new Error(data.error || 'Gagal mengirim pesan teks.');
+            };
+
+            // Send to all personal targets
+            for (const target of targets) {
+                res = await sendToTarget('personal', target);
+                data = await res.json();
+                if (!res.ok) throw new Error(data.error?.message || 'Gagal mengirim pesan.');
             }
-            showStatus(data.message || 'Pesan teks berhasil dikirim.', false);
+
+            // Send to group if selected
+            if (groupId) {
+                res = await sendToTarget('group', groupId);
+                data = await res.json();
+                if (!res.ok) throw new Error(data.error?.message || 'Gagal mengirim pesan ke grup.');
+            }
+
+            showStatus('Pesan berhasil dikirim!');
+            document.getElementById('mediaForm').reset();
         } catch (e) {
-            showStatus('Gagal: ' + e.message, true);
+            showStatus(e.message, true);
         }
     });
 
+    // Load groups on page load
     fetchGroups();
     </script>
 </body>

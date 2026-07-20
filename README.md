@@ -29,6 +29,7 @@ Jangan membagikan `.env` atau kunci sensitif.
 - Kirim pesan teks biasa ke nomor personal atau grup.
 - Kirim media/file lokal ke nomor personal atau grup.
 - Kirim media melalui URL langsung.
+- Penjadwalan pesan (sekali kirim, harian, mingguan, bulanan, cron).
 - Lihat daftar grup tempat bot bergabung.
 - Gunakan perintah `/gemini ...` untuk chatbot AI lewat WhatsApp.
 
@@ -46,15 +47,17 @@ Bot akan mengirimkan jawaban dari Gemini langsung ke chat WhatsApp Anda.
 ## Endpoints & UI
 - Dokumentasi endpoint dan contoh ada di: [public/docs.html](public/docs.html)
 - UI kirim media: [public/send.html](public/send.html)
+- UI Penjadwalan: [public/scheduler.html](public/scheduler.html)
 - Dashboard utama: [public/index.html](public/index.html)
-- Pengaturan (fitur scheduler/kalender dinonaktifkan): [public/settings.html](public/settings.html)
+- Pengaturan: [public/settings.html](public/settings.html)
 
-API penting:
-- `POST /api/internal/send-text` — kirim pesan teks biasa ke personal/grup, butuh sesi login.
-- `POST /api/internal/send-media` — upload file (multipart/form-data), butuh sesi login.
-- `POST /api/internal/send-media-url` — kirim media dari URL (JSON), butuh sesi login.
-- `POST /api/external/send-message` — endpoint publik pakai header `x-api-key`.
-- `GET /api/internal/get-groups` — daftar grup bot ikut serta.
+API penting (Unified API Gateway):
+- `POST /api/v1/messages` — kirim pesan teks, media lokal, atau media URL ke personal/grup.
+- `GET /api/v1/status` — cek status koneksi bot.
+- `POST /api/v1/validate` — validasi nomor WhatsApp.
+- `POST /api/internal/schedule-message` — buat jadwal pesan baru.
+- `DELETE /api/internal/schedule-message/:id` — hapus jadwal pesan.
+- `GET /api/internal/get-groups` — daftar grup bot ikut serta (masih internal).
 
 Untuk contoh `curl` dan contoh Node.js per endpoint, lihat [public/docs.html](public/docs.html).
 

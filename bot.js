@@ -11,6 +11,7 @@ const { v4: uuidv4 } = require('uuid');
 const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const { exec } = require('child_process');
+const rateLimit = require('express-rate-limit');
 // googleapis/leaveReminder removed (calendar feature deprecated)
 require('dotenv').config();
 const multer = require('multer');
@@ -91,14 +92,43 @@ async function startBot() {
         }
     }));
     const checkPageAuth = (req, res, next) => { if (req.session.userId) { next(); } else { res.redirect('/login.html'); } };
+    
+    // Unified API Gateway Middleware
+    const apiRateLimiter = rateLimit({
+        windowMs: 15 * 60 * 1000, // 15 minutes
+        max: 100, // limit each IP to 100 requests per windowMs
+        message: { error: { code: 'RATE_LIMIT_EXCEEDED', message: 'Too many requests, please try again later.' } }
+    });
+
+    const unifiedAuth = (req, res, next) => {
+        // Check JWT/Session for internal
+        if (req.session && req.session.userId) {
+            req.apiScope = 'internal';
+            return next();
+        }
+        // Check API Key for external
+        const apiKey = req.headers['x-api-key'];
+        if (apiKey && apiKey === process.env.EXTERNAL_API_KEY) {
+            req.apiScope = 'external';
+            return next();
+        }
+        res.status(401).json({ error: { code: 'UNAUTHORIZED', message: 'Invalid or missing authentication credentials.' } });
+    };
+
     const checkApiAuth = (req, res, next) => { if (req.session.userId) { next(); } else { res.status(401).json({ error: 'Sesi tidak valid atau telah berakhir. Silakan login kembali.' }); } };
     const checkApiKey = (req, res, next) => { const apiKey = req.headers['x-api-key']; if (apiKey && apiKey === process.env.EXTERNAL_API_KEY) { next(); } else { res.status(403).json({ error: 'Forbidden: API Key tidak valid atau tidak ada.' }); } };
-    app.use(express.static(path.join(__dirname, 'public')));
+    
+    app.use('/api/v1/', apiRateLimiter, unifiedAuth);
+
+    // Allow public access to docs.html and login.html, protect others
     app.get('/', checkPageAuth);
     app.get('/index.html', checkPageAuth);
     app.get('/validator.html', checkPageAuth);
     app.get('/settings.html', checkPageAuth);
     app.get('/send.html', checkPageAuth);
+    app.get('/scheduler.html', checkPageAuth);
+    
+    app.use(express.static(path.join(__dirname, 'public')));
     app.use('/api/internal', checkApiAuth);
 
     // =================================================================
@@ -224,9 +254,173 @@ async function startBot() {
     });
 
     // =================================================================
-    //                 API INTERNAL (DASHBOARD)
+    //                 UNIFIED API (V1)
     // =================================================================
-    app.get('/api/internal/status', (req, res) => res.json({ status: connectionStatus, qr: qrCode }));
+    
+    // 1. Send Message (Text or Media)
+    app.post('/api/v1/messages', upload.single('file'), async (req, res) => {
+        try {
+            if (!sock || !sock.user) return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'Bot is not connected.' } });
+
+            const { targetType, target, message, mediaUrl, mediaType, caption } = req.body;
+            const file = req.file;
+
+            if (!targetType || !target) {
+                return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'targetType and target are required.' } });
+            }
+            if (!message && !mediaUrl && !file) {
+                return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'message, mediaUrl, or file is required.' } });
+            }
+
+            let targetJid;
+            if (targetType === 'personal') {
+                let number = target.trim();
+                if (number.startsWith('0')) number = '62' + number.substring(1);
+                targetJid = `${number}@s.whatsapp.net`;
+                const [result] = await sock.onWhatsApp(targetJid);
+                if (!result || !result.exists) {
+                    return res.status(404).json({ error: { code: 'NOT_FOUND', message: `Number ${target} is not registered on WhatsApp.` } });
+                }
+            } else if (targetType === 'group') {
+                const groups = await sock.groupFetchAllParticipating();
+                const group = Object.values(groups).find(g => g.subject.toLowerCase() === target.toLowerCase() || g.id === target);
+                if (!group) {
+                    return res.status(404).json({ error: { code: 'NOT_FOUND', message: `Group ${target} not found.` } });
+                }
+                targetJid = group.id;
+            } else {
+                return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'targetType must be personal or group.' } });
+            }
+
+            let payload;
+            if (file) {
+                const buffer = fs.readFileSync(file.path);
+                const mime = file.mimetype || '';
+                if (mime.startsWith('image')) payload = { image: buffer, caption: caption || message || '' };
+                else if (mime.startsWith('video')) payload = { video: buffer, caption: caption || message || '' };
+                else if (mime.startsWith('audio')) payload = { audio: buffer, ptt: false };
+                else payload = { document: buffer, fileName: file.originalname, mimetype: mime };
+                try { fs.unlinkSync(file.path); } catch (e) { /* ignore */ }
+            } else if (mediaUrl) {
+                let buffer;
+                let inferredMime = '';
+                try {
+                    const https = require('https');
+                    const http = require('http');
+                    const url = require('url');
+                    
+                    buffer = await new Promise((resolve, reject) => {
+                        const parsedUrl = url.parse(mediaUrl);
+                        const client = parsedUrl.protocol === 'https:' ? https : http;
+                        const options = {
+                            rejectUnauthorized: false,
+                            headers: { 'User-Agent': 'Mozilla/5.0' }
+                        };
+                        
+                        const req = client.get(mediaUrl, options, (res) => {
+                            if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                                // Handle redirect
+                                const redirectUrl = new URL(res.headers.location, mediaUrl).href;
+                                const redirectParsed = url.parse(redirectUrl);
+                                const redirectClient = redirectParsed.protocol === 'https:' ? https : http;
+                                const redirectReq = redirectClient.get(redirectUrl, options, (redirectRes) => {
+                                    if (redirectRes.statusCode !== 200) {
+                                        reject(new Error(`HTTP ${redirectRes.statusCode}`));
+                                        return;
+                                    }
+                                    inferredMime = redirectRes.headers['content-type'] || '';
+                                    const chunks = [];
+                                    redirectRes.on('data', chunk => chunks.push(chunk));
+                                    redirectRes.on('end', () => resolve(Buffer.concat(chunks)));
+                                });
+                                redirectReq.on('error', reject);
+                                redirectReq.setTimeout(60000, () => { redirectReq.destroy(); reject(new Error('Timeout')); });
+                                return;
+                            }
+                            
+                            if (res.statusCode !== 200) {
+                                reject(new Error(`HTTP ${res.statusCode}`));
+                                return;
+                            }
+                            inferredMime = res.headers['content-type'] || '';
+                            const chunks = [];
+                            res.on('data', chunk => chunks.push(chunk));
+                            res.on('end', () => resolve(Buffer.concat(chunks)));
+                        });
+                        req.on('error', reject);
+                        req.setTimeout(60000, () => { req.destroy(); reject(new Error('Timeout')); });
+                    });
+                } catch (e) {
+                    console.error('Fetch error:', e);
+                    const detail = e.cause ? e.cause.message : e.message;
+                    return res.status(400).json({ error: { code: 'DOWNLOAD_FAILED', message: `Failed to download mediaUrl: ${detail}` } });
+                }
+                const inferType = (u) => {
+                    const lower = u.toLowerCase();
+                    if (mediaType) return mediaType;
+                    if (lower.match(/\.(jpg|jpeg|png|webp|gif)$/) || inferredMime.startsWith('image')) return 'image';
+                    if (lower.match(/\.(mp4|mov|mkv|webm)$/) || inferredMime.startsWith('video')) return 'video';
+                    if (lower.match(/\.(mp3|wav|m4a|aac)$/) || inferredMime.startsWith('audio')) return 'audio';
+                    return 'document';
+                };
+                const t = inferType(mediaUrl);
+                if (t === 'image') payload = { image: buffer, caption: caption || message || '' };
+                else if (t === 'video') payload = { video: buffer, caption: caption || message || '' };
+                else if (t === 'audio') payload = { audio: buffer };
+                else payload = { document: buffer, fileName: path.basename(mediaUrl), mimetype: inferredMime || 'application/octet-stream' };
+            } else {
+                payload = { text: message };
+            }
+
+            await sock.sendMessage(targetJid, payload);
+            log(`[API v1] Message sent to ${target} (${targetJid}) by ${req.apiScope}`);
+            res.json({ success: true, message: `Message sent to ${target}.` });
+        } catch (e) {
+            log(`[API v1] Failed to send message: ${e.message}`, 'error');
+            res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: e.message } });
+        }
+    });
+
+    // 2. Check Status
+    app.get('/api/v1/status', (req, res) => {
+        res.json({ 
+            success: true, 
+            data: { 
+                status: connectionStatus, 
+                connected: !!(sock && sock.user),
+                user: sock?.user?.id || null
+            } 
+        });
+    });
+
+    // 3. Validate Number
+    app.post('/api/v1/validate', async (req, res) => {
+        try {
+            if (!sock || !sock.user) return res.status(503).json({ error: { code: 'SERVICE_UNAVAILABLE', message: 'Bot is not connected.' } });
+            const { number } = req.body;
+            if (!number) return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'number is required.' } });
+            
+            let formatted = number.trim();
+            if (formatted.startsWith('0')) formatted = '62' + formatted.substring(1);
+            const targetJid = `${formatted}@s.whatsapp.net`;
+            
+            const [result] = await sock.onWhatsApp(targetJid);
+            res.json({ 
+                success: true, 
+                data: { 
+                    number: number, 
+                    formatted: formatted,
+                    exists: !!(result && result.exists) 
+                } 
+            });
+        } catch (e) {
+            res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: e.message } });
+        }
+    });
+
+    // =================================================================
+    //                 API INTERNAL (DASHBOARD) - LEGACY
+    // =================================================================
     app.post('/api/internal/logout-wa', async (req, res) => {
         log('Menerima permintaan logout & hapus sesi WA.');
         try {
@@ -263,8 +457,58 @@ async function startBot() {
     // =================================================================
     //                 SISTEM PENJADWALAN (SCHEDULER)
     // =================================================================
-    async function sendBroadcastWithDelay(destinations, message, source = "Scheduler") {
+    const cron = require('node-cron');
+    const cronParser = require('cron-parser');
+    const activeCronJobs = new Map();
+
+    async function sendBroadcastWithDelay(destinations, message, source = "Scheduler", mediaUrl = null) {
         log(`[${source}] Memulai broadcast ke ${destinations.length} target.`);
+        
+        let payload = { text: message };
+        if (mediaUrl) {
+            try {
+                const https = require('https');
+                const http = require('http');
+                const url = require('url');
+                
+                const buffer = await new Promise((resolve, reject) => {
+                    const parsedUrl = url.parse(mediaUrl);
+                    const client = parsedUrl.protocol === 'https:' ? https : http;
+                    const options = { rejectUnauthorized: false, headers: { 'User-Agent': 'Mozilla/5.0' } };
+                    
+                    const req = client.get(mediaUrl, options, (res) => {
+                        if (res.statusCode >= 300 && res.statusCode < 400 && res.headers.location) {
+                            const redirectUrl = new URL(res.headers.location, mediaUrl).href;
+                            const redirectParsed = url.parse(redirectUrl);
+                            const redirectClient = redirectParsed.protocol === 'https:' ? https : http;
+                            const redirectReq = redirectClient.get(redirectUrl, options, (redirectRes) => {
+                                if (redirectRes.statusCode !== 200) return reject(new Error(`HTTP ${redirectRes.statusCode}`));
+                                const chunks = [];
+                                redirectRes.on('data', chunk => chunks.push(chunk));
+                                redirectRes.on('end', () => resolve(Buffer.concat(chunks)));
+                            });
+                            redirectReq.on('error', reject);
+                            return;
+                        }
+                        if (res.statusCode !== 200) return reject(new Error(`HTTP ${res.statusCode}`));
+                        const chunks = [];
+                        res.on('data', chunk => chunks.push(chunk));
+                        res.on('end', () => resolve(Buffer.concat(chunks)));
+                    });
+                    req.on('error', reject);
+                });
+                
+                const lower = mediaUrl.toLowerCase();
+                if (lower.match(/\.(mp4|mov|mkv|webm)$/)) payload = { video: buffer, caption: message || '' };
+                else if (lower.match(/\.(mp3|wav|m4a|aac)$/)) payload = { audio: buffer };
+                else if (lower.match(/\.(pdf|doc|docx|xls|xlsx|zip|rar)$/)) payload = { document: buffer, fileName: require('path').basename(mediaUrl), mimetype: 'application/octet-stream' };
+                else payload = { image: buffer, caption: message || '' }; // Default to image
+            } catch (e) {
+                log(`[${source}] Gagal mengunduh mediaUrl: ${e.message}`, 'error');
+                // Fallback to text if media fails
+            }
+        }
+
         for (const dest of destinations) {
             try {
                 let targetJid = dest;
@@ -274,7 +518,7 @@ async function startBot() {
                     }
                     targetJid = `${targetJid}@s.whatsapp.net`;
                 }
-                await sock.sendMessage(targetJid, { text: message });
+                await sock.sendMessage(targetJid, payload);
                 log(`[${source}] Pesan terkirim ke ${targetJid}`);
             } catch (e) {
                 log(`[${source}] Gagal mengirim ke ${dest}: ${e.message}`, 'error');
@@ -285,273 +529,130 @@ async function startBot() {
         log(`[${source}] Broadcast selesai.`);
     }
 
+    function createCronJob(job) {
+        if (activeCronJobs.has(job.id)) {
+            activeCronJobs.get(job.id).stop();
+        }
+        
+        let cronExpression = '';
+        const { scheduleType, scheduleData } = job;
+        
+        if (scheduleType === 'daily') {
+            const [hour, minute] = scheduleData.time.split(':');
+            cronExpression = `${minute} ${hour} * * *`;
+        } else if (scheduleType === 'weekly') {
+            const [hour, minute] = scheduleData.time.split(':');
+            cronExpression = `${minute} ${hour} * * ${scheduleData.dayOfWeek}`;
+        } else if (scheduleType === 'monthly') {
+            const [hour, minute] = scheduleData.time.split(':');
+            cronExpression = `${minute} ${hour} ${scheduleData.dayOfMonth} * *`;
+        } else if (scheduleType === 'custom') {
+            cronExpression = scheduleData.cron;
+        }
 
-    app.get('/api/internal/get-scheduled-jobs', (req, res) => res.json(readJSON('schedules.json')));
+        if (cronExpression && cron.validate(cronExpression)) {
+            const task = cron.schedule(cronExpression, () => {
+                const allTargets = [...(job.targets || []), ...(job.groups || [])];
+                sendBroadcastWithDelay(allTargets, job.message, `Cron Job #${job.id}`, job.mediaUrl);
+            });
+            activeCronJobs.set(job.id, task);
+            log(`Cron job #${job.id} dibuat dengan ekspresi: ${cronExpression}`);
+        } else {
+            log(`Gagal membuat cron job #${job.id}: Ekspresi tidak valid (${cronExpression})`, 'error');
+        }
+    }
+
+    // Load existing schedules on startup
+    const existingSchedules = readJSON('schedules.json') || [];
+    existingSchedules.forEach(job => {
+        if (job.scheduleType !== 'once' && job.scheduleType !== 'now') {
+            createCronJob(job);
+        }
+    });
+
+    app.get('/api/internal/get-scheduled-jobs', (req, res) => {
+        const schedules = readJSON('schedules.json') || [];
+        const enriched = schedules.map(job => {
+            let nextRun = null;
+            if (job.scheduleType === 'once') {
+                nextRun = new Date(`${job.scheduleData.date}T${job.scheduleData.time}`).toISOString();
+            } else {
+                let cronExpression = '';
+                if (job.scheduleType === 'daily') cronExpression = `${job.scheduleData.time.split(':')[1]} ${job.scheduleData.time.split(':')[0]} * * *`;
+                else if (job.scheduleType === 'weekly') cronExpression = `${job.scheduleData.time.split(':')[1]} ${job.scheduleData.time.split(':')[0]} * * ${job.scheduleData.dayOfWeek}`;
+                else if (job.scheduleType === 'monthly') cronExpression = `${job.scheduleData.time.split(':')[1]} ${job.scheduleData.time.split(':')[0]} ${job.scheduleData.dayOfMonth} * *`;
+                else if (job.scheduleType === 'custom') cronExpression = job.scheduleData.cron;
+                
+                if (cronExpression) {
+                    try {
+                        const interval = cronParser.parseExpression(cronExpression);
+                        nextRun = interval.next().toISOString();
+                    } catch (e) { /* ignore */ }
+                }
+            }
+            return { ...job, nextRun };
+        });
+        res.json(enriched);
+    });
 
     app.post('/api/internal/schedule-message', (req, res) => {
-        const { targets, groups, message, templateName, scheduleType, scheduleData } = req.body;
+        const { targets, groups, message, mediaUrl, templateName, scheduleType, scheduleData } = req.body;
         const allTargets = [...(targets || []), ...(groups || [])];
-        if (allTargets.length === 0 || !message) return res.status(400).json({ error: "Target dan pesan harus diisi." });
+        if (allTargets.length === 0 || (!message && !mediaUrl)) return res.status(400).json({ error: "Target dan pesan/media harus diisi." });
+        
         const jobId = uuidv4();
-        const job = { id: jobId, ...req.body };
+        const job = { id: jobId, ...req.body, createdAt: new Date().toISOString() };
+        
         if (scheduleType === 'now') {
-            sendBroadcastWithDelay(allTargets, message, "Scheduler (Now)");
-            res.json({ success: true, message: 'Pesan sedang dikirim sekarang.' });
+            sendBroadcastWithDelay(allTargets, message, "Scheduler (Now)", mediaUrl);
+            return res.json({ success: true, message: 'Pesan sedang dikirim sekarang.' });
+        } 
+        
+        const schedules = readJSON('schedules.json') || [];
+        schedules.push(job);
+        writeJSON('schedules.json', schedules);
+        
+        if (scheduleType === 'once') {
+            const scheduleDateTime = new Date(`${scheduleData.date}T${scheduleData.time}`);
+            if (scheduleDateTime > new Date()) {
+                const delay = scheduleDateTime.getTime() - new Date().getTime();
+                setTimeout(() => {
+                    sendBroadcastWithDelay(allTargets, message, `Scheduler Job #${jobId}`, mediaUrl);
+                    const currentSchedules = readJSON('schedules.json') || [];
+                    writeJSON('schedules.json', currentSchedules.filter(s => s.id !== jobId));
+                    io.emit('schedule_updated');
+                }, delay);
+                log(`Tugas sekali kirim #${jobId} dijadwalkan untuk ${scheduleDateTime}`);
+            } else {
+                return res.status(400).json({ error: "Waktu jadwal sudah lewat." });
+            }
         } else {
-            const schedules = readJSON('schedules.json') || [];
-            schedules.push(job);
-            writeJSON('schedules.json', schedules);
-            if (scheduleType === 'once') {
-                const scheduleDateTime = new Date(`${scheduleData.date}T${scheduleData.time}`);
-                if (scheduleDateTime > new Date()) {
-                    const jobFunction = () => {
-                        sendBroadcastWithDelay(allTargets, message, `Scheduler Job #${jobId}`);
-                        const currentSchedules = readJSON('schedules.json');
-                        const updatedSchedules = currentSchedules.filter(s => s.id !== jobId);
-                        writeJSON('schedules.json', updatedSchedules);
-                        io.emit('schedule_updated');
-                    };
-                    const delay = scheduleDateTime.getTime() - new Date().getTime();
-                    setTimeout(jobFunction, delay);
-                    log(`Tugas sekali kirim #${jobId} dijadwalkan untuk ${scheduleDateTime}`);
-                }
-            } else {
-                createCronJob(job);
-            }
-            io.emit('schedule_updated');
-            res.json({ success: true, message: `Pesan berhasil dijadwalkan dengan ID: ${jobId}` });
+            createCronJob(job);
         }
+        
+        io.emit('schedule_updated');
+        res.json({ success: true, message: `Pesan berhasil dijadwalkan dengan ID: ${jobId}` });
     });
 
-    // Scheduler/Calendar features removed.
-
-    // =================================================================
-    //                         API EKSTERNAL
-    // =================================================================
-    app.post('/api/external/send-message', checkApiKey, async (req, res) => {
-        const { targetType, target, message, mediaUrl, mediaType, caption } = req.body;
-        if (!targetType || !target) {
-            return res.status(400).json({ error: 'Properti "targetType" dan "target" wajib diisi.' });
+    app.delete('/api/internal/schedule-message/:id', (req, res) => {
+        const jobId = req.params.id;
+        const schedules = readJSON('schedules.json') || [];
+        const updatedSchedules = schedules.filter(s => s.id !== jobId);
+        
+        if (schedules.length === updatedSchedules.length) {
+            return res.status(404).json({ error: "Jadwal tidak ditemukan." });
         }
-        if (!message && !mediaUrl) {
-            return res.status(400).json({ error: 'Isi "message" atau "mediaUrl" (untuk gambar/media).' });
+        
+        writeJSON('schedules.json', updatedSchedules);
+        
+        if (activeCronJobs.has(jobId)) {
+            activeCronJobs.get(jobId).stop();
+            activeCronJobs.delete(jobId);
         }
-        if (!sock || !sock.user) {
-            return res.status(503).json({ error: 'Service Unavailable: Bot belum terhubung.' });
-        }
-        try {
-            let targetJid;
-            if (targetType === 'personal') {
-                let number = target.trim();
-                if (number.startsWith('0')) {
-                    number = '62' + number.substring(1);
-                }
-                targetJid = `${number}@s.whatsapp.net`;
-                const [result] = await sock.onWhatsApp(targetJid);
-                if (!result || !result.exists) {
-                    return res.status(404).json({ error: `Nomor ${target} tidak terdaftar di WhatsApp.` });
-                }
-            } else if (targetType === 'group') {
-                const groups = await sock.groupFetchAllParticipating();
-                const group = Object.values(groups).find(g => g.subject.toLowerCase() === target.toLowerCase());
-                if (!group) {
-                    return res.status(404).json({ error: `Grup dengan nama "${target}" tidak ditemukan.` });
-                }
-                targetJid = group.id;
-            } else {
-                return res.status(400).json({ error: 'Nilai "targetType" tidak valid. Gunakan "personal" atau "group".' });
-            }
-            let payload;
-            if (mediaUrl) {
-                const inferType = (u) => {
-                    const lower = u.toLowerCase();
-                    if (mediaType) return mediaType;
-                    if (lower.match(/\.(jpg|jpeg|png|webp|gif)$/)) return 'image';
-                    if (lower.match(/\.(mp4|mov|mkv|webm)$/)) return 'video';
-                    if (lower.match(/\.(mp3|wav|m4a|aac)$/)) return 'audio';
-                    return 'document';
-                };
-                const t = inferType(mediaUrl);
-                if (t === 'image') payload = { image: { url: mediaUrl }, caption: caption || message || '' };
-                else if (t === 'video') payload = { video: { url: mediaUrl }, caption: caption || message || '' };
-                else if (t === 'audio') payload = { audio: { url: mediaUrl } };
-                else payload = { document: { url: mediaUrl }, fileName: path.basename(mediaUrl), mimetype: 'application/octet-stream' };
-            } else {
-                payload = { text: message };
-            }
-            await sock.sendMessage(targetJid, payload);
-            log(`Pesan eksternal terkirim ke ${target} (${targetJid})`);
-            res.json({ success: true, message: `Pesan berhasil dikirim ke ${target}.` });
-        } catch (e) {
-            log(`Gagal mengirim pesan eksternal: ${e.message}`, 'error');
-            res.status(500).json({ error: `Gagal mengirim pesan: ${e.message}` });
-        }
+        
+        io.emit('schedule_updated');
+        res.json({ success: true, message: `Jadwal ${jobId} berhasil dihapus.` });
     });
-
-    // =================================================================
-    //                 ENDPOINTS UNTUK MENGIRIM PESAN & MEDIA
-    // =================================================================
-    app.post('/api/internal/send-text', async (req, res) => {
-        try {
-            if (!sock || !sock.user) return res.status(503).json({ error: 'Bot belum terhubung.' });
-
-            const { personalTargets, groupId, message } = req.body;
-            if (!message) return res.status(400).json({ error: 'Pesan wajib diisi.' });
-
-            const targets = personalTargets ? personalTargets.split(',').map(n => n.trim()).filter(Boolean) : [];
-            if (!targets.length && !groupId) {
-                return res.status(400).json({ error: 'Pilih minimal satu tujuan personal atau grup.' });
-            }
-
-            const sendToJid = async (jid) => {
-                await sock.sendMessage(jid, { text: message });
-            };
-
-            for (const number of targets) {
-                let formatted = number;
-                if (formatted.startsWith('0')) formatted = '62' + formatted.substring(1);
-                const targetJid = `${formatted}@s.whatsapp.net`;
-                const [result] = await sock.onWhatsApp(targetJid);
-                if (!result || !result.exists) {
-                    return res.status(404).json({ error: `Nomor ${number} tidak terdaftar di WhatsApp.` });
-                }
-                await sendToJid(targetJid);
-            }
-
-            if (groupId) {
-                let targetGroupId = groupId;
-                if (!groupId.includes('@')) {
-                    const groups = await sock.groupFetchAllParticipating();
-                    const found = Object.values(groups).find(g => g.subject.toLowerCase() === groupId.toLowerCase());
-                    if (!found) return res.status(404).json({ error: 'Grup tidak ditemukan.' });
-                    targetGroupId = found.id;
-                }
-                await sendToJid(targetGroupId);
-            }
-
-            res.json({ success: true, message: 'Pesan teks berhasil dikirim.' });
-        } catch (e) {
-            res.status(500).json({ error: e.message || 'Gagal mengirim pesan teks.' });
-        }
-    });
-
-    app.post('/api/internal/send-media', upload.single('file'), async (req, res) => {
-        try {
-            if (!sock || !sock.user) return res.status(503).json({ error: 'Bot tidak terhubung.' });
-
-            // targets: personalTargets (comma-separated) or groupId (single)
-            const personalTargets = req.body.personalTargets ? req.body.personalTargets.split(',').map(n => n.trim()).filter(Boolean) : [];
-            const groupId = req.body.groupId || null;
-            const caption = req.body.caption || '';
-
-            const file = req.file;
-            if (!file) return res.status(400).json({ error: 'File tidak ditemukan pada request.' });
-
-            const buffer = fs.readFileSync(file.path);
-            const mime = file.mimetype || '';
-
-            const sendToJid = async (jid) => {
-                let payload;
-                if (mime.startsWith('image')) payload = { image: buffer, caption };
-                else if (mime.startsWith('video')) payload = { video: buffer, caption };
-                else if (mime.startsWith('audio')) payload = { audio: buffer, ptt: false };
-                else payload = { document: buffer, fileName: file.originalname, mimetype: mime };
-
-                await sock.sendMessage(jid, payload);
-            };
-
-            // send to personal numbers
-            for (const number of personalTargets) {
-                let formatted = number;
-                if (formatted.startsWith('0')) formatted = '62' + formatted.substring(1);
-                const targetJid = `${formatted}@s.whatsapp.net`;
-                await sendToJid(targetJid);
-            }
-
-            // send to group if provided
-            if (groupId) {
-                // if groupId looks like a full JID use it, otherwise try to resolve by name
-                let targetGroupId = groupId;
-                if (!groupId.includes('@')) {
-                    const groups = await sock.groupFetchAllParticipating();
-                    const found = Object.values(groups).find(g => g.subject.toLowerCase() === groupId.toLowerCase());
-                    if (found) targetGroupId = found.id; else return res.status(404).json({ error: 'Grup tidak ditemukan.' });
-                }
-                await sendToJid(targetGroupId);
-            }
-
-            // cleanup temp file
-            try { fs.unlinkSync(file.path); } catch (e) { /* ignore */ }
-
-            res.json({ success: true, message: 'Media berhasil dikirim.' });
-        } catch (e) {
-            res.status(500).json({ error: e.message || 'Gagal mengirim media.' });
-        }
-    });
-
-    app.post('/api/internal/send-media-url', async (req, res) => {
-        try {
-            if (!sock || !sock.user) return res.status(503).json({ error: 'Bot tidak terhubung.' });
-            const { personalTargets, groupId, url, caption } = req.body;
-            if (!url) return res.status(400).json({ error: 'URL harus disertakan.' });
-
-            // Validasi URL reachable + content-type agar error jelas
-            let inferredMime = '';
-            try {
-                const ctrl = new AbortController();
-                const timer = setTimeout(() => ctrl.abort(), 15000);
-                const head = await fetch(url, { method: 'HEAD', signal: ctrl.signal });
-                clearTimeout(timer);
-                if (!head.ok) throw new Error(`HTTP ${head.status}`);
-                inferredMime = head.headers.get('content-type') || '';
-            } catch (e) {
-                return res.status(400).json({ error: `URL tidak dapat diakses: ${e.message}` });
-            }
-
-            const inferTypeFromUrl = (u) => {
-                const lower = u.toLowerCase();
-                if (lower.match(/\.(jpg|jpeg|png|webp|gif)$/) || inferredMime.startsWith('image')) return 'image';
-                if (lower.match(/\.(mp4|mov|mkv|webm)$/) || inferredMime.startsWith('video')) return 'video';
-                if (lower.match(/\.(mp3|wav|m4a|aac)$/) || inferredMime.startsWith('audio')) return 'audio';
-                return 'document';
-            };
-
-            const type = inferTypeFromUrl(url);
-            const makePayload = () => {
-                if (type === 'image') return { image: { url }, caption: caption || '' };
-                if (type === 'video') return { video: { url }, caption: caption || '' };
-                if (type === 'audio') return { audio: { url } };
-                return { document: { url }, fileName: path.basename(url), mimetype: inferredMime || 'application/octet-stream' };
-            };
-
-            const sendToJid = async (jid) => {
-                await sock.sendMessage(jid, makePayload());
-            };
-
-            if (personalTargets) {
-                const targets = personalTargets.split(',').map(n => n.trim()).filter(Boolean);
-                for (const number of targets) {
-                    let formatted = number;
-                    if (formatted.startsWith('0')) formatted = '62' + formatted.substring(1);
-                    const targetJid = `${formatted}@s.whatsapp.net`;
-                    await sendToJid(targetJid);
-                }
-            }
-
-            if (groupId) {
-                let targetGroupId = groupId;
-                if (!groupId.includes('@')) {
-                    const groups = await sock.groupFetchAllParticipating();
-                    const found = Object.values(groups).find(g => g.subject.toLowerCase() === groupId.toLowerCase());
-                    if (found) targetGroupId = found.id; else return res.status(404).json({ error: 'Grup tidak ditemukan.' });
-                }
-                await sendToJid(targetGroupId);
-            }
-
-            res.json({ success: true, message: 'Media (via URL) berhasil dikirim.' });
-        } catch (e) { res.status(500).json({ error: e.message || 'Gagal mengirim media via URL.' }); }
-    });
-
 
     // =================================================================
     //                         JALANKAN SERVER

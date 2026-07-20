@@ -1,0 +1,20 @@
+[
+  {
+    "id": "87eeeb24-7070-482f-8340-e6da5411108a",
+    "targets": [],
+    "groups": [
+      "120363422696154365@g.us"
+    ],
+    "message": "REKAP KIRIMAN BRC",
+    "mediaUrl": "https://nispro.nusantarajaya.co.id:8000/sidia/api/shipment/image/",
+    "scheduleType": "custom",
+    "scheduleData": {
+      "date": "",
+      "time": "",
+      "dayOfWeek": "1",
+      "dayOfMonth": "",
+      "cron": "*/3 * * * *"
+    },
+    "createdAt": "2026-07-20T09:29:17.174Z"
+  }
+]
