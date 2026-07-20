@@ -329,9 +329,12 @@ async function startBot() {
     //                         API EKSTERNAL
     // =================================================================
     app.post('/api/external/send-message', checkApiKey, async (req, res) => {
-        const { targetType, target, message } = req.body;
-        if (!targetType || !target || !message) {
-            return res.status(400).json({ error: 'Properti "targetType", "target", dan "message" wajib diisi.' });
+        const { targetType, target, message, mediaUrl, mediaType, caption } = req.body;
+        if (!targetType || !target) {
+            return res.status(400).json({ error: 'Properti "targetType" dan "target" wajib diisi.' });
+        }
+        if (!message && !mediaUrl) {
+            return res.status(400).json({ error: 'Isi "message" atau "mediaUrl" (untuk gambar/media).' });
         }
         if (!sock || !sock.user) {
             return res.status(503).json({ error: 'Service Unavailable: Bot belum terhubung.' });
@@ -358,7 +361,25 @@ async function startBot() {
             } else {
                 return res.status(400).json({ error: 'Nilai "targetType" tidak valid. Gunakan "personal" atau "group".' });
             }
-            await sock.sendMessage(targetJid, { text: message });
+            let payload;
+            if (mediaUrl) {
+                const inferType = (u) => {
+                    const lower = u.toLowerCase();
+                    if (mediaType) return mediaType;
+                    if (lower.match(/\.(jpg|jpeg|png|webp|gif)$/)) return 'image';
+                    if (lower.match(/\.(mp4|mov|mkv|webm)$/)) return 'video';
+                    if (lower.match(/\.(mp3|wav|m4a|aac)$/)) return 'audio';
+                    return 'document';
+                };
+                const t = inferType(mediaUrl);
+                if (t === 'image') payload = { image: { url: mediaUrl }, caption: caption || message || '' };
+                else if (t === 'video') payload = { video: { url: mediaUrl }, caption: caption || message || '' };
+                else if (t === 'audio') payload = { audio: { url: mediaUrl } };
+                else payload = { document: { url: mediaUrl }, fileName: path.basename(mediaUrl) };
+            } else {
+                payload = { text: message };
+            }
+            await sock.sendMessage(targetJid, payload);
             log(`Pesan eksternal terkirim ke ${target} (${targetJid})`);
             res.json({ success: true, message: `Pesan berhasil dikirim ke ${target}.` });
         } catch (e) {
@@ -474,11 +495,24 @@ async function startBot() {
             const { personalTargets, groupId, url, caption } = req.body;
             if (!url) return res.status(400).json({ error: 'URL harus disertakan.' });
 
+            // Validasi URL reachable + content-type agar error jelas
+            let inferredMime = '';
+            try {
+                const ctrl = new AbortController();
+                const timer = setTimeout(() => ctrl.abort(), 15000);
+                const head = await fetch(url, { method: 'HEAD', signal: ctrl.signal });
+                clearTimeout(timer);
+                if (!head.ok) throw new Error(`HTTP ${head.status}`);
+                inferredMime = head.headers.get('content-type') || '';
+            } catch (e) {
+                return res.status(400).json({ error: `URL tidak dapat diakses: ${e.message}` });
+            }
+
             const inferTypeFromUrl = (u) => {
                 const lower = u.toLowerCase();
-                if (lower.match(/\.(jpg|jpeg|png|webp|gif)$/)) return 'image';
-                if (lower.match(/\.(mp4|mov|mkv|webm)$/)) return 'video';
-                if (lower.match(/\.(mp3|wav|m4a|aac)$/)) return 'audio';
+                if (lower.match(/\.(jpg|jpeg|png|webp|gif)$/) || inferredMime.startsWith('image')) return 'image';
+                if (lower.match(/\.(mp4|mov|mkv|webm)$/) || inferredMime.startsWith('video')) return 'video';
+                if (lower.match(/\.(mp3|wav|m4a|aac)$/) || inferredMime.startsWith('audio')) return 'audio';
                 return 'document';
             };
 
