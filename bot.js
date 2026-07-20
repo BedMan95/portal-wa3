@@ -585,7 +585,7 @@ async function startBot() {
                 
                 if (cronExpression) {
                     try {
-                        const interval = cronParser.parseExpression(cronExpression);
+                        const interval = cronParser.CronExpressionParser.parse(cronExpression);
                         nextRun = interval.next().toISOString();
                     } catch (e) { /* ignore */ }
                 }
