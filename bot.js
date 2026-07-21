@@ -669,8 +669,15 @@ async function startBot() {
         const { scheduleType, scheduleData } = job;
         
         if (scheduleType === 'daily') {
-            const [hour, minute] = scheduleData.time.split(':');
-            cronExpression = `${minute} ${hour} * * *`;
+            let [hour, minute] = scheduleData.time.split(':');
+            let min = parseInt(minute, 10);
+            let hr = parseInt(hour, 10);
+            min += Math.floor(Math.random() * 3) + 1;
+            if (min >= 60) {
+                min -= 60;
+                hr = (hr + 1) % 24;
+            }
+            cronExpression = `${min} ${hr} * * *`;
         } else if (scheduleType === 'weekly') {
             const [hour, minute] = scheduleData.time.split(':');
             cronExpression = `${minute} ${hour} * * ${scheduleData.dayOfWeek}`;
