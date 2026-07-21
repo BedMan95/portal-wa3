@@ -24,6 +24,10 @@ async function loadPage() {
     // Fetch and load template
     try {
         const response = await fetch(route.file);
+        if (response.redirected && response.url.includes('/login.html')) {
+            window.location.href = '/login.html';
+            return;
+        }
         if (!response.ok) throw new Error('Gagal memuat halaman');
         const html = await response.text();
         document.getElementById('app-content').innerHTML = html;
@@ -229,6 +233,10 @@ function initSend() {
                 }
 
                 const result = await response.json();
+                if (response.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
                 if (response.ok) {
                     alert('Berhasil: ' + result.message);
                     form.reset();
@@ -304,6 +312,11 @@ function initScheduler() {
                     body: JSON.stringify(payload)
                 });
 
+                if (response.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
+
                 const result = await response.json();
                 
                 statusContainer.classList.remove('hidden');
@@ -377,6 +390,10 @@ async function loadSchedules() {
     
     try {
         const res = await fetch('/api/internal/get-scheduled-jobs');
+        if (res.status === 401) {
+            window.location.href = '/login.html';
+            return;
+        }
         const jobs = await res.json();
         
         if (jobs.length === 0) {
@@ -460,6 +477,10 @@ async function deleteSchedule(id) {
     if(!confirm('Hapus jadwal ini?')) return;
     try {
         const res = await fetch(`/api/internal/schedule-message/${id}`, { method: 'DELETE' });
+        if (res.status === 401) {
+            window.location.href = '/login.html';
+            return;
+        }
         if(res.ok) loadSchedules();
         else alert('Gagal menghapus jadwal');
     } catch(e) {
@@ -491,6 +512,10 @@ function initSettings() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ oldPassword, newPassword })
                 });
+                if (res.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
                 const data = await res.json();
                 
                 status.classList.remove('hidden', 'text-rose-600', 'text-teal-600');
@@ -523,6 +548,10 @@ function initSettings() {
                     headers: { 'Content-Type': 'application/json' },
                     body: JSON.stringify({ username, password })
                 });
+                if (res.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
                 const data = await res.json();
                 
                 if (res.ok) {
@@ -559,6 +588,10 @@ function initSettings() {
             
             try {
                 const res = await fetch('/api/internal/api-key/generate', { method: 'POST' });
+                if (res.status === 401) {
+                    window.location.href = '/login.html';
+                    return;
+                }
                 const data = await res.json();
                 if (res.ok) {
                     apiKeyDisplay.value = data.apiKey;
@@ -581,6 +614,10 @@ async function loadApiKey() {
     if (!display) return;
     try {
         const res = await fetch('/api/internal/api-key');
+        if (res.status === 401) {
+            window.location.href = '/login.html';
+            return;
+        }
         const data = await res.json();
         display.value = data.apiKey || 'Tidak ada API Key di .env';
     } catch (e) {
@@ -594,6 +631,10 @@ async function loadUsers() {
     
     try {
         const res = await fetch('/api/internal/users');
+        if (res.status === 401) {
+            window.location.href = '/login.html';
+            return;
+        }
         const users = await res.json();
         
         list.innerHTML = users.map(u => `
@@ -615,6 +656,10 @@ window.deleteUser = async function(id) {
     if (!confirm('Hapus user ini?')) return;
     try {
         const res = await fetch(`/api/internal/users/${id}`, { method: 'DELETE' });
+        if (res.status === 401) {
+            window.location.href = '/login.html';
+            return;
+        }
         if (res.ok) {
             loadUsers();
         } else {
@@ -676,6 +721,11 @@ function initValidator() {
                         body: JSON.stringify({ number })
                     });
                     
+                    if (response.status === 401) {
+                        window.location.href = '/login.html';
+                        return;
+                    }
+
                     const result = await response.json();
                     
                     const resultEl = document.createElement('div');
