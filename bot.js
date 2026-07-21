@@ -432,7 +432,7 @@ async function startBot() {
                 fs.rmSync('auth_info_baileys', { recursive: true, force: true });
             }
             res.json({ message: 'Proses logout dan hapus sesi dimulai.' });
-            exec('pm2 restart whatsapp-bot', (err) => { if (err) log(`Gagal restart PM2: ${err}`, 'error'); });
+            exec('pm2 restart portalwa-bot', (err) => { if (err) log(`Gagal restart PM2: ${err}`, 'error'); });
         }
     });
     app.get('/api/internal/get-groups', async (req, res) => {
