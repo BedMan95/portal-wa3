@@ -1,85 +1,87 @@
 # WhatsApp Bot (Local)
 
-Ringkasan singkat untuk menjalankan dan menggunakan bot ini secara lokal.
+A robust, locally-hosted WhatsApp Bot built with Node.js and Baileys. Features a unified API gateway, web dashboard, message scheduling, and Gemini AI integration.
 
-- **Status perubahan:** Fitur Scheduler dan Google Calendar telah dihapus. UI dan endpoint terkait dihapus.
+## 🚀 Features
 
-## Persiapan
-1. Install Node.js (direkomendasikan v18+). Pastikan `node` dan `npm` tersedia.
-2. Jalankan:
-   - `npm install`
+- **Unified API Gateway**: RESTful endpoints for sending messages, media, and validating numbers.
+- **Web Dashboard**: Manage bot status, send messages, and configure settings via a clean UI.
+- **Message Scheduling**: Schedule messages (once, daily, weekly, monthly, or custom cron).
+- **Media Support**: Send images, videos, audio, and documents (local files or via URL).
+- **Gemini AI Integration**: Chat with Google's Gemini AI directly via WhatsApp (`/gemini`).
+- **Group Management**: Fetch and interact with WhatsApp groups.
+- **Rate Limiting & Auth**: Built-in API rate limiting and API key authentication.
 
-## Variabel lingkungan (.env)
-Buat file `.env` di root berisi minimal:
+## 📋 Prerequisites
 
-- `PORT` (opsional; jika diatur maka aplikasi memakai nilai tersebut, jika tidak ada maka fallback ke `3000`)
-- `SESSION_SECRET` (string rahasia untuk session)
-- `EXTERNAL_API_KEY` (API key untuk endpoint eksternal)
-- `GEMINI_API_KEY` (opsional, dipakai jika fitur Gemini aktif)
+- [Node.js](https://nodejs.org/) (v18 or higher recommended)
+- [PM2](https://pm2.keymetrics.io/) (optional, for production process management)
 
-Jangan membagikan `.env` atau kunci sensitif.
+## 🛠️ Installation
 
-## Menjalankan
-- Mulai server:
-  - `node bot.js`
-- Buka dashboard di: `http://localhost:8000` atau sesuai port yang Anda tentukan di `.env`.
-  - Default user/password: lihat file [users.json](users.json#L1) (sudah disesuaikan ke `password123`).
+1. Clone the repository and install dependencies:
+   ```bash
+   npm install
+   ```
 
-## Fitur yang tersedia
-- Kirim pesan teks biasa ke nomor personal atau grup.
-- Kirim media/file lokal ke nomor personal atau grup.
-- Kirim media melalui URL langsung.
-- Penjadwalan pesan (sekali kirim, harian, mingguan, bulanan, cron).
-- Lihat daftar grup tempat bot bergabung.
-- Gunakan perintah `/gemini ...` untuk chatbot AI lewat WhatsApp.
+2. Create a `.env` file in the root directory:
+   ```env
+   PORT=3000
+   SESSION_SECRET=your_super_secret_session_key
+   EXTERNAL_API_KEY=your_secure_api_key
+   GEMINI_API_KEY=your_google_gemini_api_key
+   SESSION_SECURE=false
+   ```
 
-## Menggunakan Gemini AI
-Fitur Gemini diaktifkan melalui perintah WhatsApp.
+## 🚦 Running the Bot
 
-1. Isi `GEMINI_API_KEY` di file `.env`.
-2. Jalankan kembali bot dengan `node bot.js`.
-3. Setelah bot terhubung ke WhatsApp, kirim pesan ke bot seperti:
-   - `/gemini apa itu portal-wa3?`
-   - `/gemini buatkan ringkasan singkat tentang proyek ini`
+### Development Mode
+```bash
+node bot.js
+```
 
-Bot akan mengirimkan jawaban dari Gemini langsung ke chat WhatsApp Anda.
+### Production Mode (using PM2)
+```bash
+npm install -g pm2
+pm2 start bot.js --name portalwa-bot --watch --ignore-watch="node_modules uploads auth_info_baileys *.json *.log"
+pm2 save
+pm2 startup
+```
 
-## Endpoints & UI
-- Dokumentasi endpoint dan contoh ada di: [public/docs.html](public/docs.html)
-- UI kirim media: [public/send.html](public/send.html)
-- UI Penjadwalan: [public/scheduler.html](public/scheduler.html)
-- Dashboard utama: [public/index.html](public/index.html)
-- Pengaturan: [public/settings.html](public/settings.html)
+## 💻 Usage
 
-API penting (Unified API Gateway):
-- `POST /api/v1/messages` — kirim pesan teks, media lokal, atau media URL ke personal/grup.
-- `GET /api/v1/status` — cek status koneksi bot.
-- `POST /api/v1/validate` — validasi nomor WhatsApp.
-- `POST /api/internal/schedule-message` — buat jadwal pesan baru.
-- `DELETE /api/internal/schedule-message/:id` — hapus jadwal pesan.
-- `GET /api/internal/get-groups` — daftar grup bot ikut serta (masih internal).
+1. Open the dashboard at `http://localhost:3000` (or your configured port).
+2. Login using credentials from `users.json` (Default: `admin` / `password123`).
+3. Scan the QR code displayed on the dashboard with your WhatsApp app to connect.
 
-Untuk contoh `curl` dan contoh Node.js per endpoint, lihat [public/docs.html](public/docs.html).
+### Gemini AI
+Send a message to the connected WhatsApp number:
+```text
+/gemini What is the capital of Indonesia?
+```
 
-## Port conflict
-Jika `EADDRINUSE` muncul, hentikan proses di port 8000 atau ganti `PORT` di `.env`.
-- Windows: `netstat -ano | findstr :8000` lalu `taskkill /PID <pid> /F`.
+## 🔌 API Documentation
 
-## File yang dihapus
-Scheduler / calendar-related files removed:
-- `handlers/leaveReminderHandler.js` (dihapus)
-- `public/scheduler.html` (dihapus)
-- `public/calendar.html` (dihapus)
-- `reminder_settings.json` (dihapus)
-- `schedules.json` (dihapus)
-- `google_token.json` (dihapus)
+Full API documentation and examples are available in the dashboard at `/docs.html`.
 
-Perubahan utama:
-- `bot.js` dibersihkan dari duplicate imports/vars dan route calendar/scheduler dihapus.
-- `public/docs.html`, `public/settings.html`, `public/index.html` diperbarui.
+### Core Endpoints (v1)
 
-## Jika mau saya lanjutkan
-- Jalankan server dan saya bisa membantu verifikasi endpoint.
-- Kembalikan fitur Kalender jika diperlukan.
+- `POST /api/v1/messages` - Send text or media messages.
+- `GET /api/v1/status` - Check bot connection status.
+- `POST /api/v1/validate` - Validate if a number is registered on WhatsApp.
 
-Jika ingin saya jalankan server sekarang, konfirmasi dan saya akan mulai serta memantau log singkat.
+*Authentication: Pass your `EXTERNAL_API_KEY` in the `x-api-key` header.*
+
+## ⚠️ Troubleshooting
+
+**Port Conflict (EADDRINUSE)**
+If the port is already in use, change the `PORT` in `.env` or kill the existing process:
+- Windows: `netstat -ano | findstr :3000` then `taskkill /PID <pid> /F`
+- Linux/Mac: `lsof -i :3000` then `kill -9 <pid>`
+
+**Bot Disconnected / Cannot Scan QR**
+Delete the `auth_info_baileys` folder and restart the bot to generate a new QR code.
+
+## 📄 License
+
+ISC License
