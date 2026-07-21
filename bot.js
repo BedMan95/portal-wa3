@@ -76,7 +76,9 @@ async function startBot() {
     const log = (message, type = 'info') => {
         const timestamp = `[${new Date().toLocaleString('id-ID', { timeZone: 'Asia/Jakarta' })}]`;
         logger[type](`${timestamp} ${message}`); // Menggunakan logger.info(), logger.error(), etc.
-        io.emit('log', `${timestamp} ${message}`);
+        // Remove \n before emitting
+        const cleanMessage = String(message).replace(/\\n/g, '').replace(/\n/g, '').trim();
+        io.emit('log', `${timestamp} ${cleanMessage}`);
     };
 
     // ... (Sisa kode middleware, API, dll tetap sama, tidak perlu diubah) ...
@@ -98,6 +100,32 @@ async function startBot() {
     const checkPageAuth = (req, res, next) => { if (req.session.userId) { next(); } else { res.redirect('/login.html'); } };
     
     // Unified API Gateway Middleware
+    app.use('/api/v1', (req, res, next) => {
+        const apiKey = req.headers['x-api-key'];
+        if (apiKey && apiKey === process.env.EXTERNAL_API_KEY) {
+            req.isExternal = true;
+            return next();
+        }
+        if (req.session.userId) {
+            req.isExternal = false;
+            return next();
+        }
+        res.status(401).json({ success: false, message: 'Unauthorized' });
+    });
+
+    // Serve static files
+    app.use(express.static(path.join(__dirname, 'public')));
+
+    // SPA Fallback
+    app.get(/(.*)/, (req, res, next) => {
+        if (req.path.startsWith('/api') || req.path.startsWith('/socket.io') || req.path === '/login' || req.path === '/logout') {
+            return next();
+        }
+        if (!req.session.userId && req.path !== '/login.html') {
+            return res.redirect('/login.html');
+        }
+        res.sendFile(path.join(__dirname, 'public', 'index.html'));
+    });
     const apiRateLimiter = rateLimit({
         windowMs: 15 * 60 * 1000, // 15 minutes
         max: 100, // limit each IP to 100 requests per windowMs
@@ -425,6 +453,99 @@ async function startBot() {
     // =================================================================
     //                 API INTERNAL (DASHBOARD) - LEGACY
     // =================================================================
+    app.get('/api/internal/users', (req, res) => {
+        try {
+            const users = db.prepare('SELECT id, username FROM users').all();
+            res.json(users);
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/internal/users', (req, res) => {
+        const { username, password } = req.body;
+        if (!username || !password) return res.status(400).json({ error: 'Username dan password wajib diisi' });
+        try {
+            const hash = bcrypt.hashSync(password, 10);
+            db.prepare('INSERT INTO users (username, password) VALUES (?, ?)').run(username, hash);
+            res.json({ message: 'User berhasil ditambahkan' });
+        } catch (e) {
+            if (e.message.includes('UNIQUE constraint failed')) {
+                res.status(400).json({ error: 'Username sudah ada' });
+            } else {
+                res.status(500).json({ error: e.message });
+            }
+        }
+    });
+
+    app.put('/api/internal/users/password', (req, res) => {
+        const { oldPassword, newPassword } = req.body;
+        const username = req.session.user;
+        if (!oldPassword || !newPassword) return res.status(400).json({ error: 'Password lama dan baru wajib diisi' });
+        
+        try {
+            const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+            if (!user || !bcrypt.compareSync(oldPassword, user.password)) {
+                return res.status(401).json({ error: 'Password lama salah' });
+            }
+            const hash = bcrypt.hashSync(newPassword, 10);
+            db.prepare('UPDATE users SET password = ? WHERE username = ?').run(hash, username);
+            res.json({ message: 'Password berhasil diubah' });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.delete('/api/internal/users/:id', (req, res) => {
+        try {
+            const count = db.prepare('SELECT COUNT(*) as count FROM users').get().count;
+            if (count <= 1) return res.status(400).json({ error: 'Tidak dapat menghapus user terakhir' });
+            
+            db.prepare('DELETE FROM users WHERE id = ?').run(req.params.id);
+            res.json({ message: 'User berhasil dihapus' });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.get('/api/internal/api-key', (req, res) => {
+        try {
+            // For MVP, we just read from process.env
+            res.json({ apiKey: process.env.EXTERNAL_API_KEY || '' });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
+    app.post('/api/internal/api-key/generate', (req, res) => {
+        try {
+            const crypto = require('crypto');
+            const newKey = crypto.randomBytes(32).toString('hex');
+            
+            const fs = require('fs');
+            const path = require('path');
+            const envPath = path.join(__dirname, '.env');
+            
+            let envContent = '';
+            if (fs.existsSync(envPath)) {
+                envContent = fs.readFileSync(envPath, 'utf8');
+            }
+            
+            if (envContent.includes('EXTERNAL_API_KEY=')) {
+                envContent = envContent.replace(/EXTERNAL_API_KEY=.*/g, `EXTERNAL_API_KEY=${newKey}`);
+            } else {
+                envContent += `\nEXTERNAL_API_KEY=${newKey}\n`;
+            }
+            
+            fs.writeFileSync(envPath, envContent.trim() + '\n');
+            process.env.EXTERNAL_API_KEY = newKey;
+            
+            res.json({ apiKey: newKey, message: 'API Key berhasil diperbarui' });
+        } catch (e) {
+            res.status(500).json({ error: e.message });
+        }
+    });
+
     app.post('/api/internal/logout-wa', async (req, res) => {
         log('Menerima permintaan logout & hapus sesi WA.');
         try {
@@ -683,6 +804,43 @@ async function startBot() {
         
         io.emit('schedule_updated');
         res.json({ success: true, message: `Jadwal ${jobId} berhasil dihapus.` });
+    });
+
+    app.put('/api/internal/schedule-message/:id', (req, res) => {
+        const jobId = req.params.id;
+        const { targets, groups, message, mediaUrl, templateName, scheduleType, scheduleData } = req.body;
+        
+        const existing = db.prepare('SELECT * FROM schedules WHERE id = ?').get(jobId);
+        if (!existing) return res.status(404).json({ error: 'Jadwal tidak ditemukan.' });
+
+        db.prepare(`
+            UPDATE schedules 
+            SET targets = ?, groups = ?, message = ?, mediaUrl = ?, templateName = ?, scheduleType = ?, scheduleData = ?
+            WHERE id = ?
+        `).run(
+            JSON.stringify(targets || []),
+            JSON.stringify(groups || []),
+            message || null,
+            mediaUrl || null,
+            templateName || null,
+            scheduleType,
+            JSON.stringify(scheduleData || {}),
+            jobId
+        );
+
+        const updatedJob = { id: jobId, ...req.body, createdAt: existing.createdAt };
+        
+        if (activeCronJobs.has(jobId)) {
+            activeCronJobs.get(jobId).stop();
+            activeCronJobs.delete(jobId);
+        }
+
+        if (scheduleType !== 'once' && scheduleType !== 'now') {
+            createCronJob(updatedJob);
+        }
+
+        io.emit('schedule_updated');
+        res.json({ success: true, message: `Jadwal ${jobId} berhasil diperbarui.` });
     });
 
     // =================================================================

@@ -1,15 +1,16 @@
 function getHeaderHTML(activePath) {
     const links = [
-        { path: '/', label: 'Utama' },
-        { path: '/validator.html', label: 'Validator' },
-        { path: '/send.html', label: 'Kirim' },
-        { path: '/scheduler.html', label: 'Jadwal' },
-        { path: '/docs.html', label: 'Docs' },
-        { path: '/settings.html', label: 'Pengaturan' }
+        { path: '#/', label: 'Utama' },
+        { path: '#/validator', label: 'Validator' },
+        { path: '#/send', label: 'Kirim' },
+        { path: '#/scheduler', label: 'Jadwal' },
+        { path: '#/docs', label: 'Docs' },
+        { path: '#/settings', label: 'Pengaturan' }
     ];
 
     const navLinks = links.map(link => {
-        const isActive = activePath === link.path ? 'active' : '';
+        // Remove hash for comparison if needed, or compare directly
+        const isActive = ('#' + activePath) === link.path || (activePath === '/' && link.path === '#/') ? 'active' : '';
         return `<a href="${link.path}" class="nav-link ${isActive}">${link.label}</a>`;
     }).join('\n                ');
 

@@ -1,0 +1,112 @@
+<div class="max-w-5xl mx-auto grid grid-cols-1 lg:grid-cols-3 gap-6">
+    <!-- Form Penjadwalan -->
+    <div class="lg:col-span-1 space-y-6">
+        <div class="card relative overflow-hidden bg-white">
+            <div class="absolute top-0 left-0 w-full h-1.5 bg-gradient-to-r from-teal-500 to-emerald-400"></div>
+            <h2 class="text-xl font-bold text-slate-800 mb-4">Buat Jadwal Baru</h2>
+            
+            <form id="scheduleForm" class="space-y-4">
+                <input type="hidden" id="editJobId" value="">
+                <div>
+                    <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Nomor Tujuan</label>
+                    <input type="text" id="targets" placeholder="0812..., 0898..." class="form-input">
+                </div>
+                
+                <div>
+                    <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Grup Tujuan</label>
+                    <select id="groupSelect" class="form-input">
+                        <option value="">-- Pilih Grup --</option>
+                    </select>
+                </div>
+
+                <div>
+                    <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Pesan</label>
+                    <textarea id="message" rows="3" class="form-input" placeholder="Isi pesan..."></textarea>
+                </div>
+
+                <div>
+                    <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">URL Media (Opsional)</label>
+                    <input type="url" id="mediaUrl" placeholder="https://example.com/image.jpg" class="form-input">
+                </div>
+
+                <div>
+                    <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tipe Jadwal</label>
+                    <select id="scheduleType" class="form-input" onchange="toggleScheduleFields()">
+                        <option value="once">Sekali Kirim (Tanggal & Waktu)</option>
+                        <option value="daily">Harian</option>
+                        <option value="weekly">Mingguan</option>
+                        <option value="monthly">Bulanan</option>
+                        <option value="custom">Custom Cron</option>
+                    </select>
+                </div>
+
+                <div id="dateField" class="space-y-2">
+                    <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tanggal</label>
+                    <input type="date" id="date" class="form-input">
+                </div>
+
+                <div id="timeField" class="space-y-2">
+                    <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Waktu (HH:MM)</label>
+                    <input type="time" id="time" class="form-input">
+                </div>
+
+                <div id="dayOfWeekField" class="space-y-2 hidden">
+                    <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Hari</label>
+                    <select id="dayOfWeek" class="form-input">
+                        <option value="1">Senin</option>
+                        <option value="2">Selasa</option>
+                        <option value="3">Rabu</option>
+                        <option value="4">Kamis</option>
+                        <option value="5">Jumat</option>
+                        <option value="6">Sabtu</option>
+                        <option value="0">Minggu</option>
+                    </select>
+                </div>
+
+                <div id="dayOfMonthField" class="space-y-2 hidden">
+                    <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Tanggal (1-31)</label>
+                    <input type="number" id="dayOfMonth" min="1" max="31" class="form-input">
+                </div>
+
+                <div id="cronField" class="space-y-2 hidden">
+                    <label class="text-xs font-semibold text-slate-500 uppercase tracking-wider">Cron Expression</label>
+                    <input type="text" id="cron" placeholder="* * * * *" class="form-input">
+                </div>
+
+                <div id="status-container" class="hidden p-3 rounded-xl border text-sm"></div>
+
+                <div class="flex space-x-2">
+                    <button type="submit" id="submitBtn" class="flex-1 py-3 rounded-xl font-bold text-sm bg-teal-600 hover:bg-teal-700 text-white transition-all">
+                        Simpan Jadwal
+                    </button>
+                    <button type="button" id="cancelEditBtn" onclick="cancelEdit()" class="hidden px-4 py-3 rounded-xl font-bold text-sm bg-slate-200 hover:bg-slate-300 text-slate-700 transition-all">
+                        Batal
+                    </button>
+                </div>
+            </form>
+        </div>
+    </div>
+
+    <!-- Daftar Jadwal -->
+    <div class="lg:col-span-2">
+        <div class="card bg-white h-full">
+            <div class="flex justify-between items-center mb-6">
+                <h2 class="text-xl font-bold text-slate-800">Daftar Jadwal Aktif</h2>
+                <button onclick="loadSchedules()" class="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                    </svg>
+                </button>
+            </div>
+            
+            <div id="schedulesList" class="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
+                <div class="text-center py-12 text-slate-400">
+                    <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
+                    </svg>
+                    <p>Memuat jadwal...</p>
+                </div>
+            </div>
+        </div>
+    </div>
+</div>
