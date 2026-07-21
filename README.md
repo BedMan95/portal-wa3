@@ -31,6 +31,12 @@ A robust, locally-hosted WhatsApp Bot built with Node.js and Baileys. Features a
    EXTERNAL_API_KEY=your_secure_api_key
    GEMINI_API_KEY=your_google_gemini_api_key
    SESSION_SECURE=false
+   DB_PATH=./database.sqlite
+   ```
+
+3. Run the database setup script (only needed once):
+   ```bash
+   node setup-db.js
    ```
 
 ## 🚦 Running the Bot

@@ -12,8 +12,14 @@ const session = require('express-session');
 const bcrypt = require('bcryptjs');
 const { exec } = require('child_process');
 const rateLimit = require('express-rate-limit');
-// googleapis/leaveReminder removed (calendar feature deprecated)
+const Database = require('better-sqlite3');
 require('dotenv').config();
+
+// Database setup
+const dbPath = process.env.DB_PATH || path.join(__dirname, 'database.sqlite');
+const db = new Database(dbPath);
+
+// googleapis/leaveReminder removed (calendar feature deprecated)
 const multer = require('multer');
 
 // Handlers
@@ -72,8 +78,6 @@ async function startBot() {
         logger[type](`${timestamp} ${message}`); // Menggunakan logger.info(), logger.error(), etc.
         io.emit('log', `${timestamp} ${message}`);
     };
-    const readJSON = (filePath) => { try { if (fs.existsSync(filePath)) { return JSON.parse(fs.readFileSync(filePath, 'utf-8')); } return null; } catch (error) { log(`Error membaca file JSON ${filePath}: ${error}`, 'error'); return null; } };
-    const writeJSON = (filePath, data) => { try { fs.writeFileSync(filePath, JSON.stringify(data, null, 2)); } catch (error) { log(`Error menulis file JSON ${filePath}: ${error}`, 'error'); } };
 
     // ... (Sisa kode middleware, API, dll tetap sama, tidak perlu diubah) ...
     // [SNIP: Kode dari middleware Express hingga sebelum fungsi connectToWhatsApp tetap sama]
@@ -234,8 +238,8 @@ async function startBot() {
     // =================================================================
     app.post('/login', (req, res) => {
         const { username, password } = req.body;
-        const users = readJSON(path.join(__dirname, 'users.json'));
-        const user = users.find(u => u.username === username);
+        const user = db.prepare('SELECT * FROM users WHERE username = ?').get(username);
+        
         if (user && bcrypt.compareSync(password, user.password)) {
             req.session.userId = user.username;
             log(`Pengguna ${username} berhasil login.`);
@@ -443,15 +447,21 @@ async function startBot() {
             res.json(groupList);
         } catch (e) { res.status(500).json({ error: 'Gagal mengambil grup.' }); }
     });
-    app.get('/api/internal/get-templates', (req, res) => res.json(readJSON('templates.json')));
+    app.get('/api/internal/get-templates', (req, res) => {
+        const templates = db.prepare('SELECT name, message FROM templates').all();
+        res.json(templates);
+    });
     app.post('/api/internal/save-template', (req, res) => {
         const { name, message } = req.body;
         if (!name || !message) return res.status(400).json({ error: 'Nama dan isi template harus diisi.' });
-        const templates = readJSON('templates.json') || [];
-        templates.push({ name, message });
-        writeJSON('templates.json', templates);
-        io.emit('templates_updated');
-        res.json({ success: true, message: 'Template berhasil disimpan.' });
+        
+        try {
+            db.prepare('INSERT OR REPLACE INTO templates (name, message) VALUES (?, ?)').run(name, message);
+            io.emit('templates_updated');
+            res.json({ success: true, message: 'Template berhasil disimpan.' });
+        } catch (e) {
+            res.status(500).json({ error: 'Gagal menyimpan template.' });
+        }
     });
 
     // =================================================================
@@ -563,7 +573,13 @@ async function startBot() {
     }
 
     // Load existing schedules on startup
-    const existingSchedules = readJSON('schedules.json') || [];
+    const existingSchedules = db.prepare('SELECT * FROM schedules').all().map(s => ({
+        ...s,
+        targets: JSON.parse(s.targets),
+        groups: JSON.parse(s.groups),
+        scheduleData: JSON.parse(s.scheduleData)
+    }));
+    
     existingSchedules.forEach(job => {
         if (job.scheduleType !== 'once' && job.scheduleType !== 'now') {
             createCronJob(job);
@@ -571,7 +587,13 @@ async function startBot() {
     });
 
     app.get('/api/internal/get-scheduled-jobs', (req, res) => {
-        const schedules = readJSON('schedules.json') || [];
+        const schedules = db.prepare('SELECT * FROM schedules').all().map(s => ({
+            ...s,
+            targets: JSON.parse(s.targets),
+            groups: JSON.parse(s.groups),
+            scheduleData: JSON.parse(s.scheduleData)
+        }));
+        
         const enriched = schedules.map(job => {
             let nextRun = null;
             if (job.scheduleType === 'once') {
@@ -608,9 +630,20 @@ async function startBot() {
             return res.json({ success: true, message: 'Pesan sedang dikirim sekarang.' });
         } 
         
-        const schedules = readJSON('schedules.json') || [];
-        schedules.push(job);
-        writeJSON('schedules.json', schedules);
+        db.prepare(`
+            INSERT INTO schedules (id, targets, groups, message, mediaUrl, templateName, scheduleType, scheduleData, createdAt)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+        `).run(
+            job.id,
+            JSON.stringify(job.targets || []),
+            JSON.stringify(job.groups || []),
+            job.message || null,
+            job.mediaUrl || null,
+            job.templateName || null,
+            job.scheduleType,
+            JSON.stringify(job.scheduleData || {}),
+            job.createdAt
+        );
         
         if (scheduleType === 'once') {
             const scheduleDateTime = new Date(`${scheduleData.date}T${scheduleData.time}`);
@@ -618,12 +651,12 @@ async function startBot() {
                 const delay = scheduleDateTime.getTime() - new Date().getTime();
                 setTimeout(() => {
                     sendBroadcastWithDelay(allTargets, message, `Scheduler Job #${jobId}`, mediaUrl);
-                    const currentSchedules = readJSON('schedules.json') || [];
-                    writeJSON('schedules.json', currentSchedules.filter(s => s.id !== jobId));
+                    db.prepare('DELETE FROM schedules WHERE id = ?').run(jobId);
                     io.emit('schedule_updated');
                 }, delay);
                 log(`Tugas sekali kirim #${jobId} dijadwalkan untuk ${scheduleDateTime}`);
             } else {
+                db.prepare('DELETE FROM schedules WHERE id = ?').run(jobId);
                 return res.status(400).json({ error: "Waktu jadwal sudah lewat." });
             }
         } else {
@@ -636,14 +669,12 @@ async function startBot() {
 
     app.delete('/api/internal/schedule-message/:id', (req, res) => {
         const jobId = req.params.id;
-        const schedules = readJSON('schedules.json') || [];
-        const updatedSchedules = schedules.filter(s => s.id !== jobId);
         
-        if (schedules.length === updatedSchedules.length) {
-            return res.status(404).json({ error: "Jadwal tidak ditemukan." });
+        const result = db.prepare('DELETE FROM schedules WHERE id = ?').run(jobId);
+        
+        if (result.changes === 0) {
+            return res.status(404).json({ error: 'Jadwal tidak ditemukan.' });
         }
-        
-        writeJSON('schedules.json', updatedSchedules);
         
         if (activeCronJobs.has(jobId)) {
             activeCronJobs.get(jobId).stop();
