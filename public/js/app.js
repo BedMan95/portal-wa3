@@ -164,7 +164,7 @@ function clearLogs() {
 
 function initSend() {
     // Fetch groups
-    fetch('/api/internal/groups')
+    fetch('/api/internal/get-groups')
         .then(res => res.json())
         .then(data => {
             const select = document.getElementById('groupSelect');
@@ -249,7 +249,7 @@ function initSend() {
 
 function initScheduler() {
     // Fetch groups
-    fetch('/api/internal/groups')
+    fetch('/api/internal/get-groups')
         .then(res => res.json())
         .then(data => {
             const select = document.getElementById('groupSelect');
