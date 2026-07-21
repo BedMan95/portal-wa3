@@ -168,11 +168,11 @@ function initSend() {
         .then(res => res.json())
         .then(data => {
             const select = document.getElementById('groupSelect');
-            if(select && data.groups) {
-                data.groups.forEach(g => {
+            if(select && Array.isArray(data)) {
+                data.forEach(g => {
                     const opt = document.createElement('option');
                     opt.value = g.id;
-                    opt.textContent = g.name;
+                    opt.textContent = g.subject;
                     select.appendChild(opt);
                 });
             }
@@ -253,11 +253,11 @@ function initScheduler() {
         .then(res => res.json())
         .then(data => {
             const select = document.getElementById('groupSelect');
-            if(select && data.groups) {
-                data.groups.forEach(g => {
+            if(select && Array.isArray(data)) {
+                data.forEach(g => {
                     const opt = document.createElement('option');
                     opt.value = g.id;
-                    opt.textContent = g.name;
+                    opt.textContent = g.subject;
                     select.appendChild(opt);
                 });
             }
