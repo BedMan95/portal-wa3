@@ -6,11 +6,11 @@ A robust, locally-hosted WhatsApp Bot built with Node.js and Baileys. Features a
 
 - **Unified API Gateway**: RESTful endpoints for sending messages, media, and validating numbers.
 - **Web Dashboard**: Manage bot status, send messages, and configure settings via a clean UI.
-- **Message Scheduling**: Schedule messages (once, daily, weekly, monthly, or custom cron).
+- **Message Scheduling**: Schedule messages (once, daily, weekly, monthly, or custom cron) with randomized minute delays for daily schedules.
 - **Media Support**: Send images, videos, audio, and documents (local files or via URL).
 - **Gemini AI Integration**: Chat with Google's Gemini AI directly via WhatsApp (`/gemini`).
 - **Group Management**: Fetch and interact with WhatsApp groups.
-- **Rate Limiting & Auth**: Built-in API rate limiting and API key authentication.
+- **Rate Limiting & Auth**: Built-in API rate limiting, API key authentication, and automatic session expiration redirects.
 
 ## 📋 Prerequisites
 
@@ -49,15 +49,14 @@ node bot.js
 ### Production Mode (using PM2)
 ```bash
 npm install -g pm2
-pm2 start bot.js --name portalwa-bot --watch --ignore-watch="node_modules uploads auth_info_baileys *.json *.log"
+pm2 start bot.js --name portalwa-bot --watch --ignore-watch="node_modules uploads auth_info_baileys *.json *.log *.sqlite"
 pm2 save
-pm2 startup
 ```
 
 ## 💻 Usage
 
 1. Open the dashboard at `http://localhost:3000` (or your configured port).
-2. Login using credentials from `users.json` (Default: `admin` / `password123`).
+2. Login using credentials Default: `admin` / `password123`
 3. Scan the QR code displayed on the dashboard with your WhatsApp app to connect.
 
 ### Gemini AI
