@@ -30,9 +30,21 @@ db.exec(`
     templateName TEXT,
     scheduleType TEXT NOT NULL,
     scheduleData TEXT,
-    createdAt TEXT NOT NULL
+    createdAt TEXT NOT NULL,
+    status TEXT DEFAULT 'pending'
   );
 `);
+
+// Add status column if it doesn't exist (Migration)
+try {
+    db.prepare("ALTER TABLE schedules ADD COLUMN status TEXT DEFAULT 'pending'").run();
+    console.log("Added 'status' column to schedules table.");
+} catch (err) {
+    // Column might already exist, ignore error
+    if (!err.message.includes('duplicate column name')) {
+        console.error("Error adding status column:", err);
+    }
+}
 
 // Migrate Users
 if (fs.existsSync('users.json')) {

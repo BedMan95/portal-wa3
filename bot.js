@@ -475,8 +475,8 @@ async function startBot() {
             } 
             
             db.prepare(`
-                INSERT INTO schedules (id, targets, groups, message, mediaUrl, templateName, scheduleType, scheduleData, createdAt)
-                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+                INSERT INTO schedules (id, targets, groups, message, mediaUrl, templateName, scheduleType, scheduleData, createdAt, status)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, 'pending')
             `).run(
                 job.id,
                 JSON.stringify(job.targets || []),
@@ -496,9 +496,15 @@ async function startBot() {
                     const randomDelay = Math.floor(Math.random() * 120000) + 60000;
                     const delay = (scheduleDateTime.getTime() - new Date().getTime()) + randomDelay;
                     setTimeout(() => {
-                        sendBroadcastWithDelay(allTargets, message, `API v1 Scheduler Job #${jobId}`, mediaUrl);
-                        db.prepare('DELETE FROM schedules WHERE id = ?').run(jobId);
+                        db.prepare("UPDATE schedules SET status = 'processing' WHERE id = ?").run(jobId);
                         io.emit('schedule_updated');
+                        sendBroadcastWithDelay(allTargets, message, `API v1 Scheduler Job #${jobId}`, mediaUrl).then(() => {
+                            db.prepare("UPDATE schedules SET status = 'completed' WHERE id = ?").run(jobId);
+                            io.emit('schedule_updated');
+                        }).catch(() => {
+                            db.prepare("UPDATE schedules SET status = 'failed' WHERE id = ?").run(jobId);
+                            io.emit('schedule_updated');
+                        });
                     }, delay);
                     log(`[API v1] One-time job #${jobId} scheduled for ${scheduleDateTime} + random delay`);
                 } else {
@@ -627,7 +633,7 @@ async function startBot() {
             exec('pm2 restart portalwa-bot', (err) => { if (err) log(`Gagal restart PM2: ${err}`, 'error'); });
         }
     });
-    app.get('/api/internal/get-groups', async (req, res) => {
+    app.get('/api/v1/groups', async (req, res) => {
         if (!sock || !sock.user) return res.status(503).json({ error: 'Bot tidak terhubung.' });
         try {
             const groups = await sock.groupFetchAllParticipating();
@@ -772,7 +778,15 @@ async function startBot() {
         if (cronExpression && cron.validate(cronExpression)) {
             const task = cron.schedule(cronExpression, () => {
                 const allTargets = [...(job.targets || []), ...(job.groups || [])];
-                sendBroadcastWithDelay(allTargets, job.message, `Cron Job #${job.id}`, job.mediaUrl);
+                db.prepare("UPDATE schedules SET status = 'processing' WHERE id = ?").run(job.id);
+                io.emit('schedule_updated');
+                sendBroadcastWithDelay(allTargets, job.message, `Cron Job #${job.id}`, job.mediaUrl).then(() => {
+                    db.prepare("UPDATE schedules SET status = 'completed' WHERE id = ?").run(job.id);
+                    io.emit('schedule_updated');
+                }).catch(() => {
+                    db.prepare("UPDATE schedules SET status = 'failed' WHERE id = ?").run(job.id);
+                    io.emit('schedule_updated');
+                });
             });
             activeCronJobs.set(job.id, task);
             log(`Cron job #${job.id} dibuat dengan ekspresi: ${cronExpression}`);
@@ -795,7 +809,7 @@ async function startBot() {
         }
     });
 
-    app.get('/api/internal/get-scheduled-jobs', (req, res) => {
+    app.get('/api/v1/schedule', (req, res) => {
         const schedules = db.prepare('SELECT * FROM schedules').all().map(s => ({
             ...s,
             targets: JSON.parse(s.targets),
@@ -826,59 +840,7 @@ async function startBot() {
         res.json(enriched);
     });
 
-    app.post('/api/internal/schedule-message', (req, res) => {
-        const { targets, groups, message, mediaUrl, templateName, scheduleType, scheduleData } = req.body;
-        const allTargets = [...(targets || []), ...(groups || [])];
-        if (allTargets.length === 0 || (!message && !mediaUrl)) return res.status(400).json({ error: "Target dan pesan/media harus diisi." });
-        
-        const jobId = uuidv4();
-        const job = { id: jobId, ...req.body, createdAt: new Date().toISOString() };
-        
-        if (scheduleType === 'now') {
-            sendBroadcastWithDelay(allTargets, message, "Scheduler (Now)", mediaUrl);
-            return res.json({ success: true, message: 'Pesan sedang dikirim sekarang.' });
-        } 
-        
-        db.prepare(`
-            INSERT INTO schedules (id, targets, groups, message, mediaUrl, templateName, scheduleType, scheduleData, createdAt)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
-        `).run(
-            job.id,
-            JSON.stringify(job.targets || []),
-            JSON.stringify(job.groups || []),
-            job.message || null,
-            job.mediaUrl || null,
-            job.templateName || null,
-            job.scheduleType,
-            JSON.stringify(job.scheduleData || {}),
-            job.createdAt
-        );
-        
-        if (scheduleType === 'once') {
-            const scheduleDateTime = new Date(`${scheduleData.date}T${scheduleData.time}`);
-            if (scheduleDateTime > new Date()) {
-                // Add random delay 1-3 minutes (60000ms - 180000ms)
-                const randomDelay = Math.floor(Math.random() * 120000) + 60000;
-                const delay = (scheduleDateTime.getTime() - new Date().getTime()) + randomDelay;
-                setTimeout(() => {
-                    sendBroadcastWithDelay(allTargets, message, `Scheduler Job #${jobId}`, mediaUrl);
-                    db.prepare('DELETE FROM schedules WHERE id = ?').run(jobId);
-                    io.emit('schedule_updated');
-                }, delay);
-                log(`Tugas sekali kirim #${jobId} dijadwalkan untuk ${scheduleDateTime} + random delay`);
-            } else {
-                db.prepare('DELETE FROM schedules WHERE id = ?').run(jobId);
-                return res.status(400).json({ error: "Waktu jadwal sudah lewat." });
-            }
-        } else {
-            createCronJob(job);
-        }
-        
-        io.emit('schedule_updated');
-        res.json({ success: true, message: `Pesan berhasil dijadwalkan dengan ID: ${jobId}` });
-    });
-
-    app.delete('/api/internal/schedule-message/:id', (req, res) => {
+    app.delete('/api/v1/schedule/:id', (req, res) => {
         const jobId = req.params.id;
         
         const result = db.prepare('DELETE FROM schedules WHERE id = ?').run(jobId);
@@ -896,7 +858,7 @@ async function startBot() {
         res.json({ success: true, message: `Jadwal ${jobId} berhasil dihapus.` });
     });
 
-    app.put('/api/internal/schedule-message/:id', (req, res) => {
+    app.put('/api/v1/schedule/:id', (req, res) => {
         const jobId = req.params.id;
         const { targets, groups, message, mediaUrl, templateName, scheduleType, scheduleData } = req.body;
         

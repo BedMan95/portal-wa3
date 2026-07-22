@@ -168,7 +168,7 @@ function clearLogs() {
 
 function initSend() {
     // Fetch groups
-    fetch('/api/internal/get-groups')
+    fetch('/api/v1/groups')
         .then(res => res.json())
         .then(data => {
             const select = document.getElementById('groupSelect');
@@ -263,7 +263,7 @@ function initSend() {
 
 function initScheduler() {
     // Fetch groups
-    fetch('/api/internal/get-groups')
+    fetch('/api/v1/groups')
         .then(res => res.json())
         .then(data => {
             const select = document.getElementById('groupSelect');
@@ -309,7 +309,7 @@ function initScheduler() {
             };
 
             try {
-                const url = editJobId ? `/api/internal/schedule-message/${editJobId}` : '/api/internal/schedule-message';
+                const url = editJobId ? `/api/v1/schedule/${editJobId}` : '/api/v1/schedule';
                 const method = editJobId ? 'PUT' : 'POST';
                 
                 const response = await fetch(url, {
@@ -395,7 +395,7 @@ async function loadSchedules() {
     if(!list) return;
     
     try {
-        const res = await fetch('/api/internal/get-scheduled-jobs');
+        const res = await fetch('/api/v1/schedule');
         if (res.status === 401) {
             window.location.href = '/login.html';
             return;
@@ -431,6 +431,12 @@ async function loadSchedules() {
             if (job.groups && job.groups.length > 0) targetStr += (targetStr ? ' | ' : '') + `Grup: ${job.groups.join(', ')}`;
             if (!targetStr) targetStr = 'Tidak ada target';
 
+            let statusBadge = '';
+            if (job.status === 'pending') statusBadge = '<span class="px-2 py-1 bg-amber-100 text-amber-700 text-[10px] font-bold uppercase tracking-wider rounded-md">Pending</span>';
+            else if (job.status === 'processing') statusBadge = '<span class="px-2 py-1 bg-blue-100 text-blue-700 text-[10px] font-bold uppercase tracking-wider rounded-md">Processing</span>';
+            else if (job.status === 'completed') statusBadge = '<span class="px-2 py-1 bg-emerald-100 text-emerald-700 text-[10px] font-bold uppercase tracking-wider rounded-md">Completed</span>';
+            else if (job.status === 'failed') statusBadge = '<span class="px-2 py-1 bg-rose-100 text-rose-700 text-[10px] font-bold uppercase tracking-wider rounded-md">Failed</span>';
+
             const nextRunStr = job.nextRun ? new Date(job.nextRun).toLocaleString('id-ID') : '-';
             const jobDataStr = encodeURIComponent(JSON.stringify(job));
             
@@ -441,6 +447,7 @@ async function loadSchedules() {
                             <span class="px-2 py-1 bg-teal-100 text-teal-700 text-[10px] font-bold uppercase tracking-wider rounded-md">
                                 ${typeLabels[job.scheduleType] || job.scheduleType}
                             </span>
+                            ${statusBadge}
                             <span class="text-xs font-mono text-slate-400">ID: ${job.id.substring(0,8)}</span>
                         </div>
                         <div class="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
@@ -482,7 +489,7 @@ async function loadSchedules() {
 async function deleteSchedule(id) {
     if(!confirm('Hapus jadwal ini?')) return;
     try {
-        const res = await fetch(`/api/internal/schedule-message/${id}`, { method: 'DELETE' });
+        const res = await fetch(`/api/v1/schedule/${id}`, { method: 'DELETE' });
         if (res.status === 401) {
             window.location.href = '/login.html';
             return;
