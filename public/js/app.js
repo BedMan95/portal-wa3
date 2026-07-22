@@ -204,27 +204,33 @@ function initSend() {
                 
                 if (textMessage && !fileInput.files[0] && !urlInput) {
                     // Send Text
-                    response = await fetch('/api/internal/send-text', {
+                    const targetType = groupId ? 'group' : 'personal';
+                    const target = groupId || personalTargets;
+                    response = await fetch('/api/v1/messages', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ personalTargets, groupId, message: textMessage })
+                        body: JSON.stringify({ targetType, target, message: textMessage })
                     });
                 } else if (urlInput) {
                     // Send Media URL
-                    response = await fetch('/api/internal/send-media-url', {
+                    const targetType = groupId ? 'group' : 'personal';
+                    const target = groupId || personalTargets;
+                    response = await fetch('/api/v1/messages', {
                         method: 'POST',
                         headers: { 'Content-Type': 'application/json' },
-                        body: JSON.stringify({ url: urlInput, personalTargets, groupId, caption })
+                        body: JSON.stringify({ targetType, target, mediaUrl: urlInput, caption })
                     });
                 } else if (fileInput.files[0]) {
                     // Send Media File
                     const formData = new FormData();
                     formData.append('file', fileInput.files[0]);
-                    if (personalTargets) formData.append('personalTargets', personalTargets);
-                    if (groupId) formData.append('groupId', groupId);
+                    const targetType = groupId ? 'group' : 'personal';
+                    const target = groupId || personalTargets;
+                    formData.append('targetType', targetType);
+                    formData.append('target', target);
                     if (caption) formData.append('caption', caption);
 
-                    response = await fetch('/api/internal/send-media', {
+                    response = await fetch('/api/v1/messages', {
                         method: 'POST',
                         body: formData
                     });
@@ -238,10 +244,10 @@ function initSend() {
                     return;
                 }
                 if (response.ok) {
-                    alert('Berhasil: ' + result.message);
+                    alert('Berhasil: ' + (result.message || 'Pesan terkirim'));
                     form.reset();
                 } else {
-                    throw new Error(result.message || 'Gagal mengirim');
+                    throw new Error(result.error?.message || result.message || 'Gagal mengirim');
                 }
             } catch (error) {
                 alert('Error: ' + error.message);
