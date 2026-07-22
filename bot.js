@@ -114,7 +114,7 @@ async function startBot() {
     });
 
     // Serve static files
-    app.use(express.static(path.join(__dirname, 'public')));
+    app.use(express.static(path.join(__dirname, 'public'), { index: false }));
 
     // SPA Fallback
     app.get(/(.*)/, (req, res, next) => {
@@ -123,6 +123,9 @@ async function startBot() {
         }
         if (!req.session.userId && req.path !== '/login.html') {
             return res.redirect('/login.html');
+        }
+        if (req.path === '/login.html') {
+            return res.sendFile(path.join(__dirname, 'public', 'login.html'));
         }
         res.sendFile(path.join(__dirname, 'public', 'index.html'));
     });
