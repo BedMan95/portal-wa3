@@ -853,8 +853,8 @@ async function startBot() {
     // =================================================================
     //                         JALANKAN SERVER
     // =================================================================
-    server.listen(PORT, '0.0.0.0', () => {
-        log(`Server berjalan di http://0.0.0.0:${PORT}`);
+    server.listen(PORT, '::', () => {
+        log(`Server berjalan di http://localhost:${PORT}`);
         connectToWhatsApp().catch(err => log(`Gagal memulai koneksi WhatsApp: ${err}`, 'error'));
     });
     process.on('SIGINT', async () => {
