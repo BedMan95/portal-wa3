@@ -456,6 +456,67 @@ async function startBot() {
         }
     });
 
+    // 4. Schedule Message (External API)
+    app.post('/api/v1/schedule', async (req, res) => {
+        try {
+            const { targets, groups, message, mediaUrl, templateName, scheduleType, scheduleData } = req.body;
+            const allTargets = [...(targets || []), ...(groups || [])];
+            
+            if (allTargets.length === 0 || (!message && !mediaUrl)) {
+                return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'targets and message/mediaUrl are required.' } });
+            }
+            
+            const jobId = uuidv4();
+            const job = { id: jobId, ...req.body, createdAt: new Date().toISOString() };
+            
+            if (scheduleType === 'now') {
+                sendBroadcastWithDelay(allTargets, message, `API v1 Scheduler (Now)`, mediaUrl);
+                return res.json({ success: true, message: 'Message is being sent now.', jobId });
+            } 
+            
+            db.prepare(`
+                INSERT INTO schedules (id, targets, groups, message, mediaUrl, templateName, scheduleType, scheduleData, createdAt)
+                VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            `).run(
+                job.id,
+                JSON.stringify(job.targets || []),
+                JSON.stringify(job.groups || []),
+                job.message || null,
+                job.mediaUrl || null,
+                job.templateName || null,
+                job.scheduleType,
+                JSON.stringify(job.scheduleData || {}),
+                job.createdAt
+            );
+            
+            if (scheduleType === 'once') {
+                const scheduleDateTime = new Date(`${scheduleData.date}T${scheduleData.time}`);
+                if (scheduleDateTime > new Date()) {
+                    // Add random delay 1-3 minutes (60000ms - 180000ms)
+                    const randomDelay = Math.floor(Math.random() * 120000) + 60000;
+                    const delay = (scheduleDateTime.getTime() - new Date().getTime()) + randomDelay;
+                    setTimeout(() => {
+                        sendBroadcastWithDelay(allTargets, message, `API v1 Scheduler Job #${jobId}`, mediaUrl);
+                        db.prepare('DELETE FROM schedules WHERE id = ?').run(jobId);
+                        io.emit('schedule_updated');
+                    }, delay);
+                    log(`[API v1] One-time job #${jobId} scheduled for ${scheduleDateTime} + random delay`);
+                } else {
+                    db.prepare('DELETE FROM schedules WHERE id = ?').run(jobId);
+                    return res.status(400).json({ error: { code: 'BAD_REQUEST', message: 'Scheduled time is in the past.' } });
+                }
+            } else {
+                createCronJob(job);
+            }
+            
+            io.emit('schedule_updated');
+            res.json({ success: true, message: `Message scheduled successfully.`, jobId });
+        } catch (e) {
+            log(`[API v1] Failed to schedule message: ${e.message}`, 'error');
+            res.status(500).json({ error: { code: 'INTERNAL_ERROR', message: e.message } });
+        }
+    });
+
     // =================================================================
     //                 API INTERNAL (DASHBOARD) - LEGACY
     // =================================================================
@@ -685,11 +746,25 @@ async function startBot() {
             }
             cronExpression = `${min} ${hr} * * *`;
         } else if (scheduleType === 'weekly') {
-            const [hour, minute] = scheduleData.time.split(':');
-            cronExpression = `${minute} ${hour} * * ${scheduleData.dayOfWeek}`;
+            let [hour, minute] = scheduleData.time.split(':');
+            let min = parseInt(minute, 10);
+            let hr = parseInt(hour, 10);
+            min += Math.floor(Math.random() * 3) + 1;
+            if (min >= 60) {
+                min -= 60;
+                hr = (hr + 1) % 24;
+            }
+            cronExpression = `${min} ${hr} * * ${scheduleData.dayOfWeek}`;
         } else if (scheduleType === 'monthly') {
-            const [hour, minute] = scheduleData.time.split(':');
-            cronExpression = `${minute} ${hour} ${scheduleData.dayOfMonth} * *`;
+            let [hour, minute] = scheduleData.time.split(':');
+            let min = parseInt(minute, 10);
+            let hr = parseInt(hour, 10);
+            min += Math.floor(Math.random() * 3) + 1;
+            if (min >= 60) {
+                min -= 60;
+                hr = (hr + 1) % 24;
+            }
+            cronExpression = `${min} ${hr} ${scheduleData.dayOfMonth} * *`;
         } else if (scheduleType === 'custom') {
             cronExpression = scheduleData.cron;
         }
@@ -782,13 +857,15 @@ async function startBot() {
         if (scheduleType === 'once') {
             const scheduleDateTime = new Date(`${scheduleData.date}T${scheduleData.time}`);
             if (scheduleDateTime > new Date()) {
-                const delay = scheduleDateTime.getTime() - new Date().getTime();
+                // Add random delay 1-3 minutes (60000ms - 180000ms)
+                const randomDelay = Math.floor(Math.random() * 120000) + 60000;
+                const delay = (scheduleDateTime.getTime() - new Date().getTime()) + randomDelay;
                 setTimeout(() => {
                     sendBroadcastWithDelay(allTargets, message, `Scheduler Job #${jobId}`, mediaUrl);
                     db.prepare('DELETE FROM schedules WHERE id = ?').run(jobId);
                     io.emit('schedule_updated');
                 }, delay);
-                log(`Tugas sekali kirim #${jobId} dijadwalkan untuk ${scheduleDateTime}`);
+                log(`Tugas sekali kirim #${jobId} dijadwalkan untuk ${scheduleDateTime} + random delay`);
             } else {
                 db.prepare('DELETE FROM schedules WHERE id = ?').run(jobId);
                 return res.status(400).json({ error: "Waktu jadwal sudah lewat." });
