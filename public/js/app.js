@@ -147,16 +147,91 @@ function initHome() {
 
     const logoutBtn = document.getElementById('logout-wa-btn');
     if(logoutBtn) {
-        logoutBtn.addEventListener('click', async () => {
-            if (confirm('Anda yakin ingin logout dari WhatsApp dan menghapus sesi? Ini akan me-restart server.')) {
+        logoutBtn.addEventListener('click', () => {
+            showConfirm('Anda yakin ingin logout dari WhatsApp dan menghapus sesi? Ini akan me-restart server.', async () => {
                 try {
                     const response = await fetch('/api/internal/logout-wa', { method: 'POST', credentials: 'include' });
                     const result = await response.json();
-                    alert(result.message);
-                } catch (error) { alert('Gagal melakukan logout: ' + error.message); }
-            }
+                    showToast(result.message, 'success');
+                } catch (error) { showToast('Gagal melakukan logout: ' + error.message, 'error'); }
+            });
         });
     }
+}
+
+function showConfirm(message, onConfirm) {
+    const overlay = document.createElement('div');
+    overlay.className = 'fixed inset-0 bg-slate-900/50 backdrop-blur-sm z-[100] flex items-center justify-center p-4 opacity-0 transition-opacity duration-300';
+    
+    const modal = document.createElement('div');
+    modal.className = 'bg-white rounded-2xl shadow-xl max-w-sm w-full p-6 transform scale-95 opacity-0 transition-all duration-300';
+    
+    modal.innerHTML = `
+        <div class="flex items-center justify-center w-12 h-12 rounded-full bg-rose-100 text-rose-600 mb-4 mx-auto">
+            <svg class="w-6 h-6" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M12 9v2m0 4h.01m-6.938 4h13.856c1.54 0 2.502-1.667 1.732-3L13.732 4c-.77-1.333-2.694-1.333-3.464 0L3.34 16c-.77 1.333.192 3 1.732 3z"></path></svg>
+        </div>
+        <h3 class="text-lg font-bold text-slate-800 text-center mb-2">Konfirmasi</h3>
+        <p class="text-sm text-slate-600 text-center mb-6">${message}</p>
+        <div class="flex gap-3">
+            <button id="confirm-cancel" class="flex-1 px-4 py-2 bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm font-semibold rounded-xl transition-colors">Batal</button>
+            <button id="confirm-ok" class="flex-1 px-4 py-2 bg-rose-600 hover:bg-rose-700 text-white text-sm font-semibold rounded-xl transition-colors shadow-sm shadow-rose-200">Ya, Lanjutkan</button>
+        </div>
+    `;
+    
+    overlay.appendChild(modal);
+    document.body.appendChild(overlay);
+    
+    // Animate in
+    requestAnimationFrame(() => {
+        overlay.classList.remove('opacity-0');
+        modal.classList.remove('scale-95', 'opacity-0');
+    });
+    
+    const close = () => {
+        overlay.classList.add('opacity-0');
+        modal.classList.add('scale-95', 'opacity-0');
+        setTimeout(() => overlay.remove(), 300);
+    };
+    
+    modal.querySelector('#confirm-cancel').onclick = close;
+    modal.querySelector('#confirm-ok').onclick = () => {
+        close();
+        onConfirm();
+    };
+}
+
+function showToast(message, type = 'info') {
+    const toastContainer = document.getElementById('toast-container') || createToastContainer();
+    const toast = document.createElement('div');
+    
+    const colors = {
+        success: 'bg-teal-50 text-teal-800 border-teal-200',
+        error: 'bg-rose-50 text-rose-800 border-rose-200',
+        info: 'bg-blue-50 text-blue-800 border-blue-200'
+    };
+    
+    toast.className = `flex items-center p-4 mb-4 text-sm border rounded-lg shadow-sm transition-all duration-300 transform translate-y-0 opacity-100 ${colors[type] || colors.info}`;
+    toast.innerHTML = `
+        <div class="flex-1">${message}</div>
+        <button type="button" class="ml-auto -mx-1.5 -my-1.5 rounded-lg p-1.5 inline-flex h-8 w-8 hover:bg-black/5" onclick="this.parentElement.remove()">
+            <span class="sr-only">Close</span>
+            <svg class="w-5 h-5" fill="currentColor" viewBox="0 0 20 20"><path fill-rule="evenodd" d="M4.293 4.293a1 1 0 011.414 0L10 8.586l4.293-4.293a1 1 0 111.414 1.414L11.414 10l4.293 4.293a1 1 0 01-1.414 1.414L10 11.414l-4.293 4.293a1 1 0 01-1.414-1.414L8.586 10 4.293 5.707a1 1 0 010-1.414z" clip-rule="evenodd"></path></svg>
+        </button>
+    `;
+    
+    toastContainer.appendChild(toast);
+    setTimeout(() => {
+        toast.classList.add('opacity-0', 'translate-y-2');
+        setTimeout(() => toast.remove(), 300);
+    }, 3000);
+}
+
+function createToastContainer() {
+    const container = document.createElement('div');
+    container.id = 'toast-container';
+    container.className = 'fixed bottom-5 right-5 z-50 flex flex-col gap-2 max-w-sm w-full';
+    document.body.appendChild(container);
+    return container;
 }
 
 function clearLogs() {
@@ -244,13 +319,13 @@ function initSend() {
                     return;
                 }
                 if (response.ok) {
-                    alert('Berhasil: ' + (result.message || 'Pesan terkirim'));
+                    showToast('Berhasil: ' + (result.message || 'Pesan terkirim'), 'success');
                     form.reset();
                 } else {
                     throw new Error(result.error?.message || result.message || 'Gagal mengirim');
                 }
             } catch (error) {
-                alert('Error: ' + error.message);
+                showToast('Error: ' + error.message, 'error');
             } finally {
                 if(submitBtn) {
                     submitBtn.disabled = false;
@@ -402,7 +477,16 @@ async function loadSchedules() {
         }
         const jobs = await res.json();
         
-        if (jobs.length === 0) {
+        // Filter jobs: only show pending or processing, or completed/failed if they are recurring (not 'once')
+        // Actually, requirement: "hanya tampilkan jadwal setelah sekarang" -> filter by nextRun > now, or status pending/processing
+        const now = new Date().getTime();
+        const activeJobs = jobs.filter(job => {
+            if (job.status === 'processing') return true;
+            if (job.nextRun && new Date(job.nextRun).getTime() > now) return true;
+            return false;
+        });
+        
+        if (activeJobs.length === 0) {
             list.innerHTML = `
                 <div class="text-center py-12 text-slate-400">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
@@ -414,7 +498,7 @@ async function loadSchedules() {
             return;
         }
         
-        list.innerHTML = jobs.map(job => {
+        list.innerHTML = activeJobs.map(job => {
             const typeLabels = {
                 once: 'Sekali', daily: 'Harian', weekly: 'Mingguan', monthly: 'Bulanan', custom: 'Cron'
             };
@@ -440,6 +524,8 @@ async function loadSchedules() {
             const nextRunStr = job.nextRun ? new Date(job.nextRun).toLocaleString('id-ID') : '-';
             const jobDataStr = encodeURIComponent(JSON.stringify(job));
             
+            const canEdit = job.status === 'pending' || job.status === 'failed';
+            
             return `
                 <div class="p-4 rounded-xl border border-slate-100 hover:border-teal-100 hover:shadow-md transition-all bg-slate-50/50 group">
                     <div class="flex justify-between items-start mb-2">
@@ -451,11 +537,13 @@ async function loadSchedules() {
                             <span class="text-xs font-mono text-slate-400">ID: ${job.id.substring(0,8)}</span>
                         </div>
                         <div class="flex space-x-1 opacity-0 group-hover:opacity-100 transition-opacity">
+                            ${canEdit ? `
                             <button onclick="editSchedule('${jobDataStr}')" class="p-1.5 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors" title="Edit">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" />
                                 </svg>
                             </button>
+                            ` : ''}
                             <button onclick="deleteSchedule('${job.id}')" class="p-1.5 text-slate-400 hover:text-rose-600 hover:bg-rose-50 rounded-lg transition-colors" title="Hapus">
                                 <svg xmlns="http://www.w3.org/2000/svg" class="h-4 w-4" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                                     <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" />
@@ -487,18 +575,19 @@ async function loadSchedules() {
 }
 
 async function deleteSchedule(id) {
-    if(!confirm('Hapus jadwal ini?')) return;
-    try {
-        const res = await fetch(`/api/v1/schedule/${id}`, { method: 'DELETE' });
-        if (res.status === 401) {
-            window.location.href = '/login.html';
-            return;
+    showConfirm('Hapus jadwal ini?', async () => {
+        try {
+            const res = await fetch(`/api/v1/schedule/${id}`, { method: 'DELETE' });
+            if (res.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            if(res.ok) loadSchedules();
+            else showToast('Gagal menghapus jadwal', 'error');
+        } catch(e) {
+            showToast('Error: ' + e.message, 'error');
         }
-        if(res.ok) loadSchedules();
-        else alert('Gagal menghapus jadwal');
-    } catch(e) {
-        alert('Error: ' + e.message);
-    }
+    });
 }
 
 function toggleScheduleFields() {
@@ -571,10 +660,10 @@ function initSettings() {
                     addUserForm.reset();
                     loadUsers();
                 } else {
-                    alert(data.error);
+                    showToast(data.error, 'error');
                 }
             } catch (err) {
-                alert('Terjadi kesalahan jaringan');
+                showToast('Terjadi kesalahan jaringan', 'error');
             }
         });
     }
@@ -596,25 +685,25 @@ function initSettings() {
     }
 
     if (generateApiKeyBtn && apiKeyDisplay) {
-        generateApiKeyBtn.addEventListener('click', async () => {
-            if (!confirm('Yakin ingin generate API Key baru? Key lama tidak akan bisa digunakan lagi.')) return;
-            
-            try {
-                const res = await fetch('/api/internal/api-key/generate', { method: 'POST' });
-                if (res.status === 401) {
-                    window.location.href = '/login.html';
-                    return;
+        generateApiKeyBtn.addEventListener('click', () => {
+            showConfirm('Yakin ingin generate API Key baru? Key lama tidak akan bisa digunakan lagi.', async () => {
+                try {
+                    const res = await fetch('/api/internal/api-key/generate', { method: 'POST' });
+                    if (res.status === 401) {
+                        window.location.href = '/login.html';
+                        return;
+                    }
+                    const data = await res.json();
+                    if (res.ok) {
+                        apiKeyDisplay.value = data.apiKey;
+                        showToast('API Key berhasil diperbarui!', 'success');
+                    } else {
+                        showToast(data.error || 'Gagal generate API Key', 'error');
+                    }
+                } catch (err) {
+                    showToast('Terjadi kesalahan jaringan', 'error');
                 }
-                const data = await res.json();
-                if (res.ok) {
-                    apiKeyDisplay.value = data.apiKey;
-                    alert('API Key berhasil diperbarui!');
-                } else {
-                    alert(data.error || 'Gagal generate API Key');
-                }
-            } catch (err) {
-                alert('Terjadi kesalahan jaringan');
-            }
+            });
         });
     }
 
@@ -665,23 +754,24 @@ async function loadUsers() {
     }
 }
 
-window.deleteUser = async function(id) {
-    if (!confirm('Hapus user ini?')) return;
-    try {
-        const res = await fetch(`/api/internal/users/${id}`, { method: 'DELETE' });
-        if (res.status === 401) {
-            window.location.href = '/login.html';
-            return;
+window.deleteUser = function(id) {
+    showConfirm('Hapus user ini?', async () => {
+        try {
+            const res = await fetch(`/api/internal/users/${id}`, { method: 'DELETE' });
+            if (res.status === 401) {
+                window.location.href = '/login.html';
+                return;
+            }
+            if (res.ok) {
+                loadUsers();
+            } else {
+                const data = await res.json();
+                showToast(data.error, 'error');
+            }
+        } catch (e) {
+            showToast('Terjadi kesalahan jaringan', 'error');
         }
-        if (res.ok) {
-            loadUsers();
-        } else {
-            const data = await res.json();
-            alert(data.error);
-        }
-    } catch (e) {
-        alert('Terjadi kesalahan jaringan');
-    }
+    });
 };
 
 function initValidator() {
@@ -694,7 +784,7 @@ function initValidator() {
             const numbers = numberList.split('\\n').map(n => n.trim()).filter(n => n);
             
             if (numbers.length === 0) {
-                alert('Masukkan setidaknya satu nomor untuk divalidasi.');
+                showToast('Masukkan setidaknya satu nomor untuk divalidasi.', 'error');
                 return;
             }
 
@@ -804,7 +894,7 @@ function initValidator() {
                 
                 document.getElementById('copy-btn').onclick = () => {
                     navigator.clipboard.writeText(validNumbers.join('\\n'));
-                    alert('Nomor valid disalin ke clipboard!');
+                    showToast('Nomor valid disalin ke clipboard!', 'success');
                 };
                 
                 document.getElementById('download-btn').onclick = () => {
