@@ -815,7 +815,7 @@ async function startBot() {
         const offset = (page - 1) * limit;
 
         const total = db.prepare('SELECT COUNT(*) as count FROM schedules').get().count;
-        const schedules = db.prepare('SELECT * FROM schedules ORDER BY id DESC LIMIT ? OFFSET ?').all(limit, offset).map(s => ({
+        const schedules = db.prepare('SELECT * FROM schedules ORDER BY createdAt DESC LIMIT ? OFFSET ?').all(limit, offset).map(s => ({
             ...s,
             targets: JSON.parse(s.targets),
             groups: JSON.parse(s.groups),
