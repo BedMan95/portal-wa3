@@ -11,6 +11,8 @@ A robust, locally-hosted WhatsApp Bot built with Node.js and Baileys. Features a
 - **Gemini AI Integration**: Chat with Google's Gemini AI directly via WhatsApp (`/gemini`).
 - **Group Management**: Fetch and interact with WhatsApp groups.
 - **Rate Limiting & Auth**: Built-in API rate limiting, API key authentication, and automatic session expiration redirects.
+- **SQLite Database**: Secure, local storage for users, templates, and schedules with bcrypt password hashing.
+- **Security Manager**: Manage dashboard users, passwords, and view API keys directly from the UI.
 
 ## 📋 Prerequisites
 

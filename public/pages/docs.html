@@ -100,6 +100,83 @@
 }'</pre>
             </div>
 
+            <!-- 4. PENJADWALAN PESAN -->
+            <div class="space-y-4 pt-8 border-t border-slate-100">
+                <div class="flex items-center space-x-3">
+                    <span class="method-badge method-post">POST</span>
+                    <code class="text-sm font-bold text-slate-800">/api/v1/schedule</code>
+                </div>
+                <div class="text-sm text-slate-600 leading-relaxed">
+                    <p class="font-semibold text-slate-800 mb-1">Kasus Penggunaan: Menjadwalkan Pesan</p>
+                    <p>Endpoint untuk membuat jadwal pengiriman pesan baru.</p>
+                </div>
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/50 text-xs text-slate-600 space-y-2">
+                    <p class="font-bold text-slate-700">Payload JSON:</p>
+                    <ul class="list-disc ml-5 space-y-1">
+                        <li><code class="font-bold text-teal-600 font-mono">name</code> (String - Wajib): Nama jadwal.</li>
+                        <li><code class="font-bold text-teal-600 font-mono">targetType</code> (String - Wajib): <code class="font-mono text-teal-700">"personal"</code> atau <code class="font-mono text-teal-700">"group"</code>.</li>
+                        <li><code class="font-bold text-teal-600 font-mono">target</code> (String - Wajib): Nomor telepon atau nama/ID grup.</li>
+                        <li><code class="font-bold text-teal-600 font-mono">message</code> (String - Wajib): Isi pesan.</li>
+                        <li><code class="font-bold text-teal-600 font-mono">scheduleType</code> (String - Wajib): Tipe jadwal (contoh: <code class="font-mono text-teal-700">"once"</code>, <code class="font-mono text-teal-700">"daily"</code>).</li>
+                        <li><code class="font-bold text-teal-600 font-mono">scheduleTime</code> (String - Wajib): Waktu jadwal.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 5. MANAJEMEN PENGGUNA (INTERNAL) -->
+            <div class="space-y-4 pt-8 border-t border-slate-100">
+                <div class="flex items-center space-x-3">
+                    <span class="method-badge method-get">GET</span>
+                    <span class="method-badge method-post">POST</span>
+                    <span class="method-badge method-put">PUT</span>
+                    <span class="method-badge method-delete">DELETE</span>
+                    <code class="text-sm font-bold text-slate-800">/api/internal/users</code>
+                </div>
+                <div class="text-sm text-slate-600 leading-relaxed">
+                    <p class="font-semibold text-slate-800 mb-1">Kasus Penggunaan: Manajemen Pengguna Dashboard (Hanya Internal)</p>
+                    <p>Endpoint untuk mengelola pengguna dashboard. Hanya dapat diakses melalui sesi login dashboard.</p>
+                </div>
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/50 text-xs text-slate-600 space-y-2">
+                    <ul class="list-disc ml-5 space-y-1">
+                        <li><code class="font-bold text-teal-600 font-mono">GET /api/internal/users</code>: Mengambil daftar pengguna.</li>
+                        <li><code class="font-bold text-teal-600 font-mono">POST /api/internal/users</code>: Menambah pengguna baru (Payload: <code class="font-mono">username</code>, <code class="font-mono">password</code>).</li>
+                        <li><code class="font-bold text-teal-600 font-mono">PUT /api/internal/users/password</code>: Mengubah password pengguna saat ini (Payload: <code class="font-mono">oldPassword</code>, <code class="font-mono">newPassword</code>).</li>
+                        <li><code class="font-bold text-teal-600 font-mono">DELETE /api/internal/users/:id</code>: Menghapus pengguna berdasarkan ID.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 6. MANAJEMEN API KEY (INTERNAL) -->
+            <div class="space-y-4 pt-8 border-t border-slate-100">
+                <div class="flex items-center space-x-3">
+                    <span class="method-badge method-get">GET</span>
+                    <span class="method-badge method-post">POST</span>
+                    <code class="text-sm font-bold text-slate-800">/api/internal/api-key</code>
+                </div>
+                <div class="text-sm text-slate-600 leading-relaxed">
+                    <p class="font-semibold text-slate-800 mb-1">Kasus Penggunaan: Manajemen API Key (Hanya Internal)</p>
+                    <p>Endpoint untuk melihat dan membuat ulang API Key eksternal.</p>
+                </div>
+                <div class="bg-slate-50 p-4 rounded-xl border border-slate-200/50 text-xs text-slate-600 space-y-2">
+                    <ul class="list-disc ml-5 space-y-1">
+                        <li><code class="font-bold text-teal-600 font-mono">GET /api/internal/api-key</code>: Mengambil API Key saat ini.</li>
+                        <li><code class="font-bold text-teal-600 font-mono">POST /api/internal/api-key/generate</code>: Membuat ulang API Key baru.</li>
+                    </ul>
+                </div>
+            </div>
+
+            <!-- 7. LOGOUT WHATSAPP (INTERNAL) -->
+            <div class="space-y-4 pt-8 border-t border-slate-100">
+                <div class="flex items-center space-x-3">
+                    <span class="method-badge method-post">POST</span>
+                    <code class="text-sm font-bold text-slate-800">/api/internal/logout-wa</code>
+                </div>
+                <div class="text-sm text-slate-600 leading-relaxed">
+                    <p class="font-semibold text-slate-800 mb-1">Kasus Penggunaan: Logout Sesi WhatsApp (Hanya Internal)</p>
+                    <p>Endpoint untuk memutuskan koneksi dan menghapus sesi WhatsApp saat ini.</p>
+                </div>
+            </div>
+
             <!-- Gemini AI -->
             <div class="pt-8 border-t border-slate-100 space-y-4">
                 <h3 class="text-sm font-bold text-slate-800 uppercase tracking-wider">Gemini AI via WhatsApp</h3>
