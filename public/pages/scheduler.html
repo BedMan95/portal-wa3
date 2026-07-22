@@ -91,12 +91,19 @@
     <div class="lg:col-span-2">
         <div class="card bg-white h-full">
             <div class="flex justify-between items-center mb-6">
-                <h2 class="text-xl font-bold text-slate-800">Daftar Jadwal Aktif</h2>
-                <button onclick="loadSchedules()" class="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors">
-                    <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
-                    </svg>
-                </button>
+                <h2 class="text-xl font-bold text-slate-800">Daftar Jadwal</h2>
+                <div class="flex items-center space-x-2">
+                    <select id="scheduleFilter" onchange="loadSchedules()" class="form-input py-1.5 text-sm w-auto">
+                        <option value="active">Aktif (Mendatang)</option>
+                        <option value="past">Riwayat (Selesai/Lalu)</option>
+                        <option value="all">Semua</option>
+                    </select>
+                    <button onclick="loadSchedules()" class="p-2 text-slate-400 hover:text-teal-600 hover:bg-teal-50 rounded-lg transition-colors">
+                        <svg xmlns="http://www.w3.org/2000/svg" class="h-5 w-5" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path stroke-linecap="round" stroke-linejoin="round" stroke-width="2" d="M4 4v5h.582m15.356 2A8.001 8.001 0 004.582 9m0 0H9m11 11v-5h-.581m0 0a8.003 8.003 0 01-15.357-2m15.357 2H15" />
+                        </svg>
+                    </button>
+                </div>
             </div>
             
             <div id="schedulesList" class="space-y-4 max-h-[600px] overflow-y-auto pr-2 custom-scrollbar">
@@ -107,6 +114,7 @@
                     <p>Memuat jadwal...</p>
                 </div>
             </div>
+            <div id="schedulePagination" class="mt-4"></div>
         </div>
     </div>
 </div>

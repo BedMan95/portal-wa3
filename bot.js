@@ -810,7 +810,12 @@ async function startBot() {
     });
 
     app.get('/api/v1/schedule', (req, res) => {
-        const schedules = db.prepare('SELECT * FROM schedules').all().map(s => ({
+        const page = parseInt(req.query.page) || 1;
+        const limit = parseInt(req.query.limit) || 10;
+        const offset = (page - 1) * limit;
+
+        const total = db.prepare('SELECT COUNT(*) as count FROM schedules').get().count;
+        const schedules = db.prepare('SELECT * FROM schedules ORDER BY id DESC LIMIT ? OFFSET ?').all(limit, offset).map(s => ({
             ...s,
             targets: JSON.parse(s.targets),
             groups: JSON.parse(s.groups),
@@ -837,7 +842,7 @@ async function startBot() {
             }
             return { ...job, nextRun };
         });
-        res.json(enriched);
+        res.json({ data: enriched, total, page, limit, totalPages: Math.ceil(total / limit) });
     });
 
     app.delete('/api/v1/schedule/:id', (req, res) => {

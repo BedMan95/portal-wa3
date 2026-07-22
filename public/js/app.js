@@ -465,40 +465,49 @@ function editSchedule(jobStr) {
     document.getElementById('scheduleForm').scrollIntoView({ behavior: 'smooth' });
 }
 
-async function loadSchedules() {
+let currentSchedulePage = 1;
+
+async function loadSchedules(page = 1) {
+    currentSchedulePage = page;
     const list = document.getElementById('schedulesList');
+    const paginationContainer = document.getElementById('schedulePagination');
     if(!list) return;
     
     try {
-        const res = await fetch('/api/v1/schedule');
+        const res = await fetch(`/api/v1/schedule?page=${page}&limit=10`);
         if (res.status === 401) {
             window.location.href = '/login.html';
             return;
         }
-        const jobs = await res.json();
+        const responseData = await res.json();
+        const jobs = responseData.data || [];
         
-        // Filter jobs: only show pending or processing, or completed/failed if they are recurring (not 'once')
-        // Actually, requirement: "hanya tampilkan jadwal setelah sekarang" -> filter by nextRun > now, or status pending/processing
+        const filterEl = document.getElementById('scheduleFilter');
+        const filterValue = filterEl ? filterEl.value : 'active';
+        
         const now = new Date().getTime();
-        const activeJobs = jobs.filter(job => {
-            if (job.status === 'processing') return true;
-            if (job.nextRun && new Date(job.nextRun).getTime() > now) return true;
-            return false;
+        const filteredJobs = jobs.filter(job => {
+            const isFutureOrProcessing = job.status === 'processing' || (job.nextRun && new Date(job.nextRun).getTime() > now);
+            
+            if (filterValue === 'active') return isFutureOrProcessing;
+            if (filterValue === 'past') return !isFutureOrProcessing;
+            return true; // 'all'
         });
         
-        if (activeJobs.length === 0) {
+        if (filteredJobs.length === 0) {
             list.innerHTML = `
                 <div class="text-center py-12 text-slate-400">
                     <svg xmlns="http://www.w3.org/2000/svg" class="h-12 w-12 mx-auto mb-3 text-slate-300" fill="none" viewBox="0 0 24 24" stroke="currentColor">
                         <path stroke-linecap="round" stroke-linejoin="round" stroke-width="1.5" d="M12 8v4l3 3m6-3a9 9 0 11-18 0 9 9 0 0118 0z" />
                     </svg>
-                    <p>Belum ada jadwal aktif</p>
+                    <p>Tidak ada jadwal ditemukan</p>
                 </div>
             `;
+            if (paginationContainer) paginationContainer.innerHTML = '';
             return;
         }
         
-        list.innerHTML = activeJobs.map(job => {
+        list.innerHTML = filteredJobs.map(job => {
             const typeLabels = {
                 once: 'Sekali', daily: 'Harian', weekly: 'Mingguan', monthly: 'Bulanan', custom: 'Cron'
             };
@@ -569,6 +578,22 @@ async function loadSchedules() {
                 </div>
             `;
         }).join('');
+
+        if (paginationContainer && responseData.totalPages > 1) {
+            let paginationHTML = '<div class="flex justify-center space-x-2 mt-4">';
+            if (responseData.page > 1) {
+                paginationHTML += `<button onclick="loadSchedules(${responseData.page - 1})" class="px-3 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm">Prev</button>`;
+            }
+            paginationHTML += `<span class="px-3 py-1 text-sm text-slate-500">Page ${responseData.page} of ${responseData.totalPages}</span>`;
+            if (responseData.page < responseData.totalPages) {
+                paginationHTML += `<button onclick="loadSchedules(${responseData.page + 1})" class="px-3 py-1 rounded bg-slate-100 hover:bg-slate-200 text-slate-700 text-sm">Next</button>`;
+            }
+            paginationHTML += '</div>';
+            paginationContainer.innerHTML = paginationHTML;
+        } else if (paginationContainer) {
+            paginationContainer.innerHTML = '';
+        }
+
     } catch (e) {
         list.innerHTML = `<div class="p-4 text-rose-500 text-sm text-center">Gagal memuat jadwal: ${e.message}</div>`;
     }
@@ -582,7 +607,7 @@ async function deleteSchedule(id) {
                 window.location.href = '/login.html';
                 return;
             }
-            if(res.ok) loadSchedules();
+            if(res.ok) loadSchedules(currentSchedulePage);
             else showToast('Gagal menghapus jadwal', 'error');
         } catch(e) {
             showToast('Error: ' + e.message, 'error');
